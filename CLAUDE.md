@@ -20,7 +20,9 @@ python3 serve.py        # servir la app → http://localhost:5173 (puerto opcion
 
 **Iconos**: `python3 tools/make_icons.py` regenera `icons/icon-{180,192,512}.png` (dibujados por código, sin dependencias). Edita el diseño en ese script, no los PNG.
 
-**Probar en un iPhone**: `serve.py` escucha en todas las interfaces e imprime la URL de la red local; ábrela en Safari con el móvil en la misma wifi. Por HTTP en la red local no hay service worker (requiere HTTPS), así que la app instalada solo carga mientras el Mac sirve. Para usarla de verdad sin el Mac hay que publicarla en un hosting estático con HTTPS (es una carpeta de archivos estáticos, sin build).
+**Probar en un iPhone**: `serve.py` escucha en todas las interfaces e imprime la URL de la red local; ábrela en Safari con el móvil en la misma wifi. Por HTTP en la red local no hay service worker (requiere HTTPS), así que la app instalada solo carga mientras el Mac sirve. La versión real está publicada en GitHub Pages.
+
+**Despliegue**: GitHub Pages sirve la rama `main` tal cual (raíz del repo, con `.nojekyll`) en https://manuelpedrazab30.github.io/habitos/ (repo `manuelpedrazab30/habitos`). Hacer push a `main` publica en 1–2 minutos. Todas las rutas son relativas (la app vive bajo `/habitos/`): no uses rutas absolutas que empiecen por `/`. Tras cambiar archivos de `src/`, sube `CACHE` en `sw.js` si cambia la lista `SHELL`.
 
 **Tests**: abrir `http://localhost:5173/tests/index.html` en el navegador. Runner propio en `tests/runner.js` (`test`, `eq`, `ok`, `near`).
 - Un solo test o grupo: `tests/index.html?grep=streaks` (filtra por subcadena del nombre).
