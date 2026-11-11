@@ -124,6 +124,28 @@ setInterval(() => {
   }
 }, 60_000);
 
+// Las gráficas se dibujan al ancho real (ui/charts.js chartWidth): re-render al girar/redimensionar
+let lastWidth = window.innerWidth;
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (window.innerWidth === lastWidth || main.querySelector('form.habit-form')) return;
+    lastWidth = window.innerWidth;
+    render();
+  }, 200);
+});
+
+// Tooltips en táctil: se cierran al desplazar o tocar fuera de una gráfica
+window.addEventListener('scroll', hideTip, { passive: true });
+document.addEventListener('touchstart', (e) => { if (!e.target.closest('svg')) hideTip(); }, { passive: true });
+
+// PWA: uso sin conexión una vez instalada. Solo en HTTPS real; en localhost no, para no
+// servir código cacheado mientras se desarrolla.
+if ('serviceWorker' in navigator && window.isSecureContext && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
+  navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service worker no registrado', e));
+}
+
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('input, textarea, select') || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'n') ctx.go('#/nuevo');

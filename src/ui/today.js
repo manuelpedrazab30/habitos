@@ -5,6 +5,7 @@ import { fmt, globalMessages } from '../domain/messages.js';
 import { weekStatus, measurements } from '../domain/stats.js';
 import { h } from './dom.js';
 import { ring } from './charts.js';
+import { installHint } from './install.js';
 
 // Vista "Hoy": registrar es un toque. Todo lo demás (estadísticas, edición) está a un nivel más.
 
@@ -41,6 +42,8 @@ export function todayView(state, ctx) {
       ),
       !isToday ? h('button', { class: 'btn ghost', onClick: () => { ctx.ui.day = today; ctx.rerender(); } }, 'Volver a hoy') : null,
     ),
+
+    isToday ? installHint(ctx) : null,
 
     messages.length ? h('ul', { class: 'messages' }, messages.map((m) => h('li', { class: `msg ${m.kind}` }, m.text))) : null,
 
@@ -95,11 +98,27 @@ function habitCard(habit, state, day, ctx) {
       h('button', { class: 'step', 'aria-label': 'Restar', disabled: !v, onClick: () => ctx.logEntry(habit, day, v - habit.step > 0 ? v - habit.step : null) }, '−'),
       h('button', {
         class: 'count-val', 'aria-label': 'Escribir cantidad',
-        onClick: () => {
-          const raw = prompt(`${habit.name}: cantidad (${habit.unit || 'unidades'})`, v || '');
-          if (raw === null) return;
-          const n = parseFloat(String(raw).replace(',', '.'));
-          ctx.logEntry(habit, day, n > 0 ? n : null);
+        // Tocar el número lo convierte en un campo (teclado numérico en el móvil)
+        onClick: (e) => {
+          const btn = e.currentTarget;
+          const input = h('input', { type: 'number', inputmode: 'decimal', step: 'any', min: 0, class: 'count-input', value: v || '', 'aria-label': `Cantidad de ${habit.name}` });
+          let done = false;
+          const commit = () => {
+            if (done) return;
+            done = true;
+            const n = parseFloat(String(input.value).replace(',', '.'));
+            const next = n > 0 ? n : null;
+            if (next !== (v || null)) ctx.logEntry(habit, day, next);
+            else input.replaceWith(btn);
+          };
+          input.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') commit();
+            if (ev.key === 'Escape') { done = true; input.replaceWith(btn); }
+          });
+          input.addEventListener('blur', commit);
+          btn.replaceWith(input);
+          input.focus();
+          input.select();
         },
       }, h('b', {}, fmt(v)), h('small', {}, `/${fmt(habit.dailyGoal)} ${habit.unit}`)),
       h('button', { class: 'step plus', 'aria-label': 'Sumar', onClick: () => ctx.logEntry(habit, day, v + habit.step) }, '+'),
@@ -150,6 +169,7 @@ function weekStrip(habit, log, day, ctx) {
 
 function emptyState(ctx) {
   return h('section', { class: 'view empty' },
+    installHint(ctx),
     h('h1', {}, 'Empieza con un hábito'),
     h('p', { class: 'muted' }, 'Elige uno para empezar en un toque, o crea el tuyo. Podrás ajustar metas y plazos cuando quieras.'),
     h('div', { class: 'templates' }, TEMPLATES.map((t, i) => h('button', { class: 'template card', onClick: () => ctx.go(`#/nuevo?t=${i}`) },

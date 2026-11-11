@@ -18,6 +18,10 @@ python3 serve.py        # servir la app → http://localhost:5173 (puerto opcion
 ```
 (También está en `.claude/launch.json` como `habitos` para el panel de preview.) Los módulos ES necesitan HTTP; abrir `index.html` con `file://` no funciona. `serve.py` es `http.server` con `Cache-Control: no-store`: con `python3 -m http.server` el navegador reutiliza módulos antiguos tras editar y aparecen errores como "does not provide an export named …".
 
+**Iconos**: `python3 tools/make_icons.py` regenera `icons/icon-{180,192,512}.png` (dibujados por código, sin dependencias). Edita el diseño en ese script, no los PNG.
+
+**Probar en un iPhone**: `serve.py` escucha en todas las interfaces e imprime la URL de la red local; ábrela en Safari con el móvil en la misma wifi. Por HTTP en la red local no hay service worker (requiere HTTPS), así que la app instalada solo carga mientras el Mac sirve. Para usarla de verdad sin el Mac hay que publicarla en un hosting estático con HTTPS (es una carpeta de archivos estáticos, sin build).
+
 **Tests**: abrir `http://localhost:5173/tests/index.html` en el navegador. Runner propio en `tests/runner.js` (`test`, `eq`, `ok`, `near`).
 - Un solo test o grupo: `tests/index.html?grep=streaks` (filtra por subcadena del nombre).
 - Para automatizar: el resultado queda en `window.__testResults` (`{ passed, failed: [{name, error}] }`) y en `document.title`.
@@ -32,7 +36,15 @@ src/store.js  estado único + persistencia en localStorage
 src/ui/       vistas: funciones (state, ctx) → elemento DOM
 src/app.js    arranque, router por hash, feedback de gamificación (toasts de XP/récord/nivel)
 src/demo.js   datos de ejemplo (botón en el estado vacío)
+sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPhone/Android)
 ```
+
+### PWA y móvil
+- `index.html` lleva las meta de iOS (`apple-touch-icon`, `apple-mobile-web-app-*`, barra de estado `black-translucent`); `.topbar` y `.nav` reservan `env(safe-area-inset-*)`.
+- `sw.js` es "red primero" con copia en caché para uso sin conexión. Solo se registra en HTTPS fuera de localhost (`app.js`), para no servir código viejo en desarrollo. **Si añades un archivo a `src/`, añádelo a `SHELL` en `sw.js`** y sube `CACHE` cuando cambie la lista.
+- La app instalada en iOS tiene su propio localStorage, separado del de Safari (por eso Ajustes explica cómo exportar e importar).
+- Gráficas: el ancho del viewBox es el ancho real disponible (`chartWidth()` en `charts.js`), para que el texto no encoja en el móvil; `app.js` vuelve a renderizar al cambiar el ancho. Los tooltips responden a `touchstart` y se cierran al desplazar.
+- Campos de texto a 16 px como mínimo (si no, iOS hace zoom al enfocar); botones táctiles de ≥ 44 px en `@media (max-width: 600px)`.
 
 ### Modelo de datos (`store.js`, `domain/habits.js`)
 - `state = { version, habits: Habit[], entries: { [habitId]: { 'YYYY-MM-DD': number } }, settings }`. Un valor por hábito y día; `setEntry(id, key, null)` borra.

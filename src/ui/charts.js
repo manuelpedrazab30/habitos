@@ -5,6 +5,16 @@ import { h, hideTip, s, showTip } from './dom.js';
 // Gráficas SVG hechas a mano (sin dependencias). Todas son responsivas vía viewBox
 // y comparten el tooltip de dom.js.
 
+/**
+ * Ancho del viewBox = ancho real disponible (≤ 640). Así el texto de 10–11 px se ve a ese
+ * tamaño también en el móvil en lugar de encogerse. app.js re-renderiza al cambiar el ancho.
+ */
+export function chartWidth() {
+  const main = document.getElementById('view');
+  const avail = (main?.clientWidth || window.innerWidth) - 62; // padding de main + tarjeta
+  return Math.round(Math.max(280, Math.min(640, avail)));
+}
+
 const tipAt = (e, html) => {
   const p = e.touches?.[0] || e;
   showTip(html, p.clientX, p.clientY);
@@ -72,7 +82,7 @@ export function heatmap({ from, to, value, label, color, onSelect, today }) {
  * points: [{key, value}] · projection: {fromKey, fromValue, toKey, toValue} | null
  */
 export function lineChart({ points, goal = null, projection = null, deadline = null, unit = '', color, from, to }) {
-  const W = 640;
+  const W = chartWidth();
   const H = 260;
   const pad = { l: 44, r: 16, t: 16, b: 28 };
   const span = Math.max(1, diffDays(from, to));
@@ -97,7 +107,7 @@ export function lineChart({ points, goal = null, projection = null, deadline = n
       s('text', { x: pad.l - 6, y: y(v) + 4, class: 'axis', 'text-anchor': 'end' }, fmt(v)),
     );
   }
-  const ticks = 5;
+  const ticks = W < 420 ? 3 : 5;
   for (let i = 0; i <= ticks; i++) {
     const k = addDays(from, Math.round((span * i) / ticks));
     svg.append(s('text', { x: x(k), y: H - 8, class: 'axis', 'text-anchor': i === 0 ? 'start' : i === ticks ? 'end' : 'middle' }, formatDate(k)));
@@ -146,6 +156,7 @@ export function lineChart({ points, goal = null, projection = null, deadline = n
   };
   const leave = () => { cross.setAttribute('visibility', 'hidden'); focus.setAttribute('visibility', 'hidden'); hideTip(); };
   overlay.addEventListener('mousemove', move);
+  overlay.addEventListener('touchstart', move, { passive: true });
   overlay.addEventListener('touchmove', move, { passive: true });
   overlay.addEventListener('mouseleave', leave);
   overlay.addEventListener('touchend', leave);
@@ -155,7 +166,7 @@ export function lineChart({ points, goal = null, projection = null, deadline = n
 
 /** Barras verticales simples. bars: [{label, value, tip, highlight}] */
 export function barChart({ bars, color, goal = null, format = fmt, height = 180, max = null }) {
-  const W = 640;
+  const W = chartWidth();
   const H = height;
   const pad = { l: 8, r: 8, t: 18, b: 24 };
   const top = Math.max(max ?? 0, goal ?? 0, ...bars.map((b) => b.value), 1);
@@ -167,10 +178,11 @@ export function barChart({ bars, color, goal = null, format = fmt, height = 180,
     const g = s('g', { class: `bar ${b.highlight ? 'highlight' : ''}` },
       s('rect', { x: bx, y: y(b.value), width: bw * 0.64, height: Math.max(0, H - pad.b - y(b.value)), rx: 4, style: { fill: b.highlight ? 'var(--warn)' : color } }),
       s('text', { x: bx + bw * 0.32, y: H - 8, class: 'axis', 'text-anchor': 'middle' }, b.label),
-      b.value ? s('text', { x: bx + bw * 0.32, y: y(b.value) - 4, class: 'axis value', 'text-anchor': 'middle' }, format(b.value)) : null,
+      b.value && bw >= 22 ? s('text', { x: bx + bw * 0.32, y: y(b.value) - 4, class: 'axis value', 'text-anchor': 'middle' }, format(b.value)) : null,
       s('rect', { x: pad.l + i * bw, y: pad.t, width: bw, height: H - pad.t - pad.b, fill: 'transparent' }),
     );
     if (b.tip) {
+      g.addEventListener('touchstart', (e) => tipAt(e, b.tip), { passive: true });
       g.addEventListener('mousemove', (e) => tipAt(e, b.tip));
       g.addEventListener('mouseleave', hideTip);
     }

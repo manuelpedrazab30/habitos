@@ -1,4 +1,5 @@
 import { h, toast } from './dom.js';
+import { installCard } from './install.js';
 
 export function settingsView(state, ctx) {
   const archived = state.habits.filter((x) => x.archived);
@@ -15,6 +16,7 @@ export function settingsView(state, ctx) {
 
   return h('section', { class: 'view settings' },
     h('h1', {}, 'Ajustes'),
+    installCard(),
     h('div', { class: 'card' },
       h('h2', {}, 'Tus datos'),
       h('p', { class: 'muted' }, 'Todo se guarda solo en este navegador, sin cuentas. Haz una copia si cambias de dispositivo.'),
