@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Tests</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 24px; }
+    .pass { color: #059669; }
+    .fail { color: #dc2626; }
+    pre { margin: 4px 0 8px 18px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1 id="summary">Ejecutando…</h1>
+  <div id="out"></div>
+  <script type="module">
+    import { run } from './runner.js';
+    import './domain.test.js';
+    import './store.test.js';
+    run();
+  </script>
+</body>
+</html>

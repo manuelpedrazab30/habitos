@@ -1,0 +1,150 @@
+import { test, eq, ok, near } from './runner.js';
+import { addDays, dateRange, diffDays, weekday, weekStart } from '../src/domain/dates.js';
+import { createHabit, isDone, isScheduled, validateHabit } from '../src/domain/habits.js';
+import { computeStreak } from '../src/domain/streaks.js';
+import { habitXp, levelInfo, goalReached } from '../src/domain/gamification.js';
+import { completionRate, linearTrend, targetProjection, totalProjection, weekStatus, weekdayRates } from '../src/domain/stats.js';
+import { habitMessages, targetMessage } from '../src/domain/messages.js';
+
+const T = '2026-11-11'; // miércoles
+const logOf = (keys, v = 1) => Object.fromEntries(keys.map((k) => [k, v]));
+const daily = (extra = {}) => createHabit({ name: 'x', kind: 'check', schedule: { type: 'daily' }, createdAt: '2026-11-01', ...extra });
+
+// ── Fechas
+test('dates: addDays cruza meses y años', () => {
+  eq(addDays('2026-12-31', 1), '2027-01-01');
+  eq(addDays('2026-03-01', -1), '2026-02-28');
+});
+test('dates: weekday 0 = lunes y weekStart', () => {
+  eq(weekday('2026-11-09'), 0);
+  eq(weekday(T), 2);
+  eq(weekday('2026-11-15'), 6);
+  eq(weekStart(T), '2026-11-09');
+});
+test('dates: diffDays robusto a cambios de horario', () => {
+  eq(diffDays('2026-03-28', '2026-03-30'), 2);
+  eq(diffDays('2026-10-24', '2026-10-26'), 2);
+  eq(dateRange('2026-11-09', '2026-11-11'), ['2026-11-09', '2026-11-10', '2026-11-11']);
+});
+
+// ── Hábitos
+test('habits: createHabit normaliza tipos y calendario', () => {
+  const h = createHabit({ name: '  Leer ', kind: 'count', dailyGoal: '20', schedule: { type: 'weekly', times: 12 } });
+  eq(h.name, 'Leer');
+  eq(h.dailyGoal, 20);
+  eq(h.schedule, { type: 'weekly', times: 7 });
+  eq(createHabit({ kind: 'raro' }).kind, 'check');
+});
+test('habits: validación de objetivo de medida', () => {
+  const h = createHabit({ name: 'Peso', kind: 'target', goal: { start: 80, value: 80 } });
+  ok(validateHabit(h).goalValue);
+  ok(validateHabit(createHabit({ name: '', kind: 'check' })).name);
+  eq(validateHabit(createHabit({ name: 'Peso', kind: 'target', goal: { start: 85, value: 78 } })), {});
+});
+test('habits: isDone e isScheduled', () => {
+  const c = createHabit({ name: 'a', kind: 'count', dailyGoal: 10 });
+  ok(!isDone(c, 9));
+  ok(isDone(c, 10));
+  const d = createHabit({ name: 'b', schedule: { type: 'days', days: [0, 2] } });
+  ok(isScheduled(d, '2026-11-09'));
+  ok(!isScheduled(d, '2026-11-10'));
+});
+
+// ── Rachas
+test('streaks: diaria con hoy pendiente no rompe', () => {
+  const s = computeStreak(daily(), logOf(dateRange('2026-11-05', '2026-11-10')), T);
+  eq([s.current, s.best, s.pending], [6, 6, true]);
+  const s2 = computeStreak(daily(), logOf(dateRange('2026-11-05', T)), T);
+  eq([s2.current, s2.pending], [7, false]);
+});
+test('streaks: un hueco reinicia la racha actual pero conserva el récord', () => {
+  const s = computeStreak(daily(), logOf(['2026-11-05', '2026-11-06', '2026-11-07', '2026-11-09', '2026-11-10']), T);
+  eq([s.current, s.best], [2, 3]);
+});
+test('streaks: días concretos ignoran días no programados', () => {
+  const h = daily({ schedule: { type: 'days', days: [0, 2, 4] } });
+  const s = computeStreak(h, logOf(['2026-11-02', '2026-11-04', '2026-11-06', '2026-11-09']), T);
+  eq([s.current, s.pending], [4, true]);
+});
+test('streaks: N por semana cuenta semanas cumplidas', () => {
+  const h = daily({ schedule: { type: 'weekly', times: 2 }, createdAt: '2026-10-26' });
+  const log = logOf(['2026-10-27', '2026-10-29', '2026-11-03', '2026-11-05', '2026-11-10']);
+  const s = computeStreak(h, log, T);
+  eq([s.current, s.best, s.unit, s.pending], [2, 2, 'semana', true]);
+  eq(computeStreak(h, { ...log, [T]: 1 }, T).current, 3);
+});
+test('streaks: registros anteriores a la creación cuentan (relleno hacia atrás)', () => {
+  const s = computeStreak(daily({ createdAt: T }), logOf(['2026-11-09', '2026-11-10']), T);
+  eq(s.current, 2);
+});
+
+// ── XP y niveles
+test('levels: umbrales 100 / 300 / 600', () => {
+  eq(levelInfo(0).level, 1);
+  eq(levelInfo(99).level, 1);
+  eq(levelInfo(100).level, 2);
+  eq(levelInfo(299).level, 2);
+  eq(levelInfo(300).level, 3);
+  eq(levelInfo(100).span, 200);
+  eq(levelInfo(250).toNext, 50);
+});
+test('xp: bonus creciente por racha', () => {
+  const h = daily({ createdAt: '2026-11-09' });
+  eq(habitXp(h, logOf(['2026-11-09', '2026-11-10', T]), T), 10 + 12 + 14);
+  eq(habitXp(h, logOf(['2026-11-09', T]), T), 10 + 10);
+});
+test('xp: meta de total alcanzada suma bonus', () => {
+  const h = createHabit({ name: 'l', kind: 'count', dailyGoal: 10, goal: { total: 30 }, createdAt: '2026-11-09' });
+  const log = { '2026-11-09': 12, '2026-11-10': 12, [T]: 12 };
+  ok(goalReached(h, log));
+  eq(habitXp(h, log, T), 36 + 250);
+});
+
+// ── Estadísticas
+test('stats: tendencia lineal', () => {
+  near(linearTrend([{ x: 0, y: 1 }, { x: 1, y: 3 }, { x: 2, y: 5 }]).slope, 2);
+  eq(linearTrend([{ x: 1, y: 1 }]), null);
+});
+test('stats: completionRate excluye hoy si aún no está hecho', () => {
+  const h = daily({ createdAt: addDays(T, -9) });
+  const log = logOf([addDays(T, -9), addDays(T, -7), addDays(T, -5), addDays(T, -3), addDays(T, -1)]);
+  near(completionRate(h, log, addDays(T, -29), T, T), 5 / 9);
+});
+test('stats: proyección de objetivo detecta retraso', () => {
+  const h = createHabit({ name: 'Peso', kind: 'target', unit: 'kg', goal: { start: 90, value: 80, deadline: addDays(T, 50) }, createdAt: addDays(T, -14) });
+  const log = { [addDays(T, -14)]: 90, [addDays(T, -7)]: 89, [T]: 88 };
+  const p = targetProjection(h, log, T);
+  near(p.perDay, -1 / 7);
+  eq(p.etaKey, addDays(T, 56));
+  eq(p.onTrack, false);
+  near(p.requiredPerDay, -8 / 50);
+  const msg = targetMessage(h, p, T);
+  ok(msg.includes('Te faltan 8 kg'), msg);
+  ok(msg.includes('6 días tarde'), msg);
+});
+test('stats: proyección de total', () => {
+  const h = createHabit({ name: 'l', kind: 'count', dailyGoal: 5, goal: { total: 100 }, createdAt: addDays(T, -9) });
+  const log = Object.fromEntries(dateRange(addDays(T, -9), T).map((k) => [k, 5]));
+  const p = totalProjection(h, log, T);
+  eq([p.done, p.remaining, p.perDay], [50, 50, 5]);
+  eq(p.etaKey, addDays(T, 10));
+});
+test('stats: weekStatus y weekdayRates', () => {
+  const h = daily({ schedule: { type: 'weekly', times: 3 } });
+  eq(weekStatus(h, logOf(['2026-11-09']), T), { done: 1, times: 3, daysLeft: 5, met: false });
+  const rates = weekdayRates([daily()], { [daily().id]: {} }, '2026-11-01', T, T);
+  eq(rates.length, 7);
+});
+
+// ── Mensajes
+test('messages: avisa cuando hoy iguala el récord', () => {
+  const h = daily({ createdAt: '2026-10-20' });
+  const log = logOf([...dateRange('2026-10-20', '2026-10-26'), ...dateRange('2026-11-05', '2026-11-10')]);
+  const msgs = habitMessages(h, log, T);
+  ok(msgs.some((m) => m.kind === 'streak' && m.text.includes('igualas tu mejor racha (7 días)')), JSON.stringify(msgs));
+});
+test('messages: semanal con todos los días restantes necesarios', () => {
+  const h = daily({ schedule: { type: 'weekly', times: 5 } });
+  const msgs = habitMessages(h, {}, T); // miércoles: quedan 5 días (incluido hoy), faltan 5
+  ok(msgs.some((m) => m.kind === 'risk' && m.text.includes('necesitas todos')), JSON.stringify(msgs));
+});
