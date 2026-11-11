@@ -49,7 +49,7 @@ sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPho
 - Campos de texto a 16 px como mínimo (si no, iOS hace zoom al enfocar); botones táctiles de ≥ 44 px en `@media (max-width: 600px)`.
 
 ### Modelo de datos (`store.js`, `domain/habits.js`)
-- `state = { version, habits: Habit[], entries: { [habitId]: { 'YYYY-MM-DD': number } }, settings }`. Un valor por hábito y día; `setEntry(id, key, null)` borra.
+- `state = { version, habits: Habit[], entries: { [habitId]: { 'YYYY-MM-DD': number } }, workouts, settings }`. Un valor por hábito y día; `setEntry(id, key, null)` borra (y borra también la sesión de entrenamiento de ese día).
 - Tres `kind` de hábito: `check` (valor 1), `count` (cantidad con `dailyGoal`), `target` (medición que va hacia `goal.value` desde `goal.start`; la dirección subir/bajar se infiere).
 - Tres `schedule`: `daily`, `days` (días concretos, 0 = lunes) y `weekly` (N veces por semana, cualquier día). Casi toda la lógica de rachas/estadísticas se bifurca entre "semanal" y "diario/días concretos".
 - Un registro = un día, en todos los tipos. En un hábito "3 veces por semana" cada registro es un día concreto de esa semana (la tarjeta de Hoy muestra la tira L–D con los días hechos); la semana se cumple con N días distintos.
@@ -58,7 +58,14 @@ sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPho
   - `count`: `{ total, deadline }` (cantidad acumulada).
   - `target`: `{ start, value, deadline }`.
 - `createHabit()` es el normalizador único: lo usan el formulario, `updateHabit`, la importación y `migrate()`. Si añades un campo, añádelo ahí.
-- Cambios de esquema: subir `VERSION` y añadir un paso en `migrate()` en `store.js`. v2 eliminó `goal.total` de los hábitos `check`.
+- Cambios de esquema: subir `VERSION` y añadir un paso en `migrate()` en `store.js`. v2 eliminó `goal.total` de los hábitos `check`; v3 añadió `habit.routine` y `state.workouts`.
+
+### Entrenamiento y sobrecarga progresiva (`domain/workouts.js`)
+- Un hábito `check` puede tener `routine: [{ id, name, sets, reps, weight }]` (el plan; `reps` = objetivo por serie). Las sesiones van en `state.workouts[habitId][día] = [{ exerciseId, name, sets, reps, weight }]`, una por día; `store.setWorkout()` guarda la sesión **y** marca el día (`entries = 1`). `weight: null` = peso corporal, fuera de las estadísticas de peso.
+- La estadística clave es el peso por ejercicio (`exerciseStats`): cambio desde el inicio y en 4 semanas, récord, sesiones seguidas con el mismo peso (`STALL_SESSIONS` = 4 → estancado) y sugerencia de doble progresión: si en la última sesión llegaste a las reps del plan, toca subir `WEIGHT_STEP` (2,5 kg).
+- En hábitos con rutina, marcar el día (Hoy, tira semanal o historial) abre `ui/workoutSheet.js` en lugar de alternar. La hoja se precarga con lo registrado ese día, si no con la última vez de cada ejercicio, si no con el plan (`prefillSession`); repetir la sesión anterior es un toque.
+- XP: +`PR_XP` por cada récord de peso (`prCount`, sin contar la primera sesión de cada ejercicio). `ctx.logWorkout()` anuncia los récords nuevos.
+- `overloadMessages` genera los mensajes: qué ejercicios subir y a cuántos kg, estancamientos, récords recientes y la mayor subida en 4 semanas.
 
 ### Principio clave: todo lo derivado se calcula, nunca se guarda
 Rachas, XP, niveles, estadísticas y mensajes se recalculan desde `entries` en cada render. Así, deshacer un registro o rellenar días pasados deja todo coherente sin contadores que sincronizar. No persistas XP ni rachas.
@@ -79,6 +86,7 @@ Los días son claves locales `'YYYY-MM-DD'`, comparables como strings. Usa siemp
 - Sin framework. `ui/dom.js` aporta `h()` (HTML), `s()` (SVG), `toast()` y un tooltip compartido. `h()` ignora hijos `null`/`false`; `element.replaceChildren()` **no**, así que filtra antes.
 - Las variables CSS dentro de `style` (`{'--c': color}`) funcionan porque `h()` usa `setProperty`. En SVG, los colores con `var(--x)` deben ir en `style`, no como atributo `fill`/`stroke`.
 - Cada cambio del store re-renderiza la vista activa entera (salvo si hay un `form.habit-form` en pantalla, para no perder lo que el usuario escribe). El estado efímero de UI (día seleccionado en Hoy, rangos de gráficas, editor de día abierto) vive en `ctx.ui` en `app.js`.
-- Todo registro debe pasar por `ctx.logEntry()`, no por `store.setEntry()` directamente: calcula la XP ganada, detecta récords y subidas de nivel y ofrece "Deshacer".
+- Todo registro debe pasar por `ctx.logEntry()` / `ctx.logWorkout()` (ambos usan `withFeedback` en `app.js`), no por el store directamente: calculan la XP ganada, detectan récords (de racha y de peso) y subidas de nivel y ofrecen "Deshacer".
+- Modales: `ui/sheet.js` (`openSheet`) monta la hoja en `<body>`, fuera de `#view`, así que sobrevive a los re-render; se cierra con el fondo, Escape o al cambiar de ruta. `element.append()` tampoco ignora `null`: filtra antes.
 - Rutas: `#/` (Hoy), `#/progreso`, `#/nuevo[?t=índice de plantilla]`, `#/editar/:id`, `#/habito/:id`, `#/ajustes`. Atajos de teclado: `h`, `p`, `n`.
 - Gráficas SVG hechas a mano en `ui/charts.js` (`heatmap`, `lineChart`, `barChart`, `ring`). No añadas librerías de gráficas: el proyecto evita dependencias y pasos de build.

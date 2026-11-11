@@ -47,3 +47,22 @@ test('store: eliminar hábito borra sus registros y es reversible', () => {
   s.undo();
   eq(s.get().habits.length, 1);
 });
+
+test('store: setWorkout marca el día y desmarcar borra la sesión', () => {
+  const s = createStore(memoryStorage());
+  const h = s.addHabit({ name: 'Entrenar', kind: 'check', routine: [{ name: 'Sentadilla' }] });
+  const exId = s.get().habits[0].routine[0].id;
+  s.setWorkout(h.id, '2026-11-11', [{ exerciseId: exId, name: 'Sentadilla', sets: 3, reps: 8, weight: 60 }]);
+  eq(s.get().entries[h.id]['2026-11-11'], 1);
+  eq(s.get().workouts[h.id]['2026-11-11'][0].weight, 60);
+  s.setEntry(h.id, '2026-11-11', null);
+  eq(s.get().workouts[h.id]['2026-11-11'], undefined);
+  s.undo();
+  eq(s.get().workouts[h.id]['2026-11-11'][0].weight, 60);
+});
+test('store: datos v2 migran con workouts vacío', () => {
+  const mem = memoryStorage();
+  mem.setItem(STORAGE_KEY, JSON.stringify({ version: 2, habits: [{ name: 'A', kind: 'check' }], entries: {} }));
+  const st = createStore(mem).get();
+  eq([st.version, st.workouts, st.habits[0].routine], [3, {}, []]);
+});

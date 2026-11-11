@@ -3,6 +3,8 @@ import { todayKey } from './domain/dates.js';
 import { levelInfo, totalXp } from './domain/gamification.js';
 import { computeStreak, streakLabel } from './domain/streaks.js';
 import { demoState } from './demo.js';
+import { bestWeights } from './domain/workouts.js';
+import { fmt } from './domain/messages.js';
 import { h, hideTip, toast } from './ui/dom.js';
 import { todayView } from './ui/today.js';
 import { habitFormView } from './ui/habitForm.js';
@@ -32,34 +34,51 @@ const ctx = {
     toast('Datos de ejemplo cargados. Bórralos en Ajustes cuando quieras.', { timeout: 5000 });
   },
 
-  /** Registrar un valor con feedback: XP ganada, récords, subida de nivel y deshacer. */
+  /** Registrar un valor con feedback (XP, récords, nivel, deshacer). Todo registro pasa por aquí. */
   logEntry(habit, key, value) {
-    const today = todayKey();
-    const before = store.get();
-    const xpBefore = totalXp(before, today);
-    const streakBefore = computeStreak(habit, before.entries[habit.id], today);
-    store.setEntry(habit.id, key, value);
-    const after = store.get();
-    const xpAfter = totalXp(after, today);
-    const streakAfter = computeStreak(habit, after.entries[habit.id], today);
-    const gained = xpAfter - xpBefore;
-    const lvBefore = levelInfo(xpBefore).level;
-    const lvAfter = levelInfo(xpAfter).level;
+    withFeedback(habit, () => store.setEntry(habit.id, key, value));
+  },
 
-    if (gained > 0) {
-      celebrate(habit.id);
-      if (lvAfter > lvBefore) {
-        toast(`Nivel ${lvAfter} alcanzado`, { tone: 'level', timeout: 4500 });
-      } else if (streakAfter.best > streakBefore.best && streakAfter.best > 1) {
-        toast(`Nuevo récord en ${habit.name}: ${streakLabel(streakAfter.best, streakAfter.unit)} (+${gained} XP)`, { tone: 'good', action: 'Deshacer', onAction: () => store.undo() });
-      } else {
-        toast(`+${gained} XP · ${habit.emoji} ${habit.name}`, { tone: 'good', action: 'Deshacer', onAction: () => store.undo() });
-      }
-    } else if (gained < 0) {
-      toast(`${habit.emoji} ${habit.name}: registro quitado (${gained} XP)`, { action: 'Deshacer', onAction: () => store.undo() });
-    }
+  /** Guardar una sesión de entrenamiento (marca el día como hecho) con el mismo feedback. */
+  logWorkout(habit, key, items) {
+    withFeedback(habit, () => store.setWorkout(habit.id, key, items), { saved: 'Sesión guardada' });
   },
 };
+
+function withFeedback(habit, mutate, { saved = null } = {}) {
+  const today = todayKey();
+  const before = store.get();
+  const xpBefore = totalXp(before, today);
+  const streakBefore = computeStreak(habit, before.entries[habit.id], today);
+  const bestBefore = bestWeights(before.workouts?.[habit.id]);
+  mutate();
+  const after = store.get();
+  const xpAfter = totalXp(after, today);
+  const streakAfter = computeStreak(habit, after.entries[habit.id], today);
+  const bestAfter = bestWeights(after.workouts?.[habit.id]);
+  const gained = xpAfter - xpBefore;
+  const lvAfter = levelInfo(xpAfter).level;
+  const undo = { action: 'Deshacer', onAction: () => store.undo() };
+  // Récords de peso nuevos (no cuenta la primera vez que se registra un ejercicio)
+  const prs = (habit.routine || []).filter((ex) => ex.id in bestBefore && bestAfter[ex.id] > bestBefore[ex.id]);
+
+  if (gained > 0) {
+    celebrate(habit.id);
+    if (lvAfter > levelInfo(xpBefore).level) {
+      toast(`Nivel ${lvAfter} alcanzado`, { tone: 'level', timeout: 4500 });
+    } else if (prs.length) {
+      toast(`Récord de peso: ${prs.map((ex) => `${ex.name} ${fmt(bestAfter[ex.id])} kg`).join(', ')} (+${gained} XP)`, { tone: 'good', timeout: 5000, ...undo });
+    } else if (streakAfter.best > streakBefore.best && streakAfter.best > 1) {
+      toast(`Nuevo récord en ${habit.name}: ${streakLabel(streakAfter.best, streakAfter.unit)} (+${gained} XP)`, { tone: 'good', ...undo });
+    } else {
+      toast(`+${gained} XP · ${habit.emoji} ${habit.name}`, { tone: 'good', ...undo });
+    }
+  } else if (gained < 0) {
+    toast(`${habit.emoji} ${habit.name}: registro quitado (${gained} XP)`, undo);
+  } else if (saved) {
+    toast(saved, undo);
+  }
+}
 
 function celebrate(habitId) {
   requestAnimationFrame(() => {

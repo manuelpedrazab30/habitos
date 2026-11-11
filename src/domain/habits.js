@@ -1,4 +1,5 @@
 import { addDays, diffDays, weekday, todayKey } from './dates.js';
+import { normalizeRoutine } from './workouts.js';
 
 /**
  * Tres tipos de hábito cubren casi todo:
@@ -18,6 +19,9 @@ import { addDays, diffDays, weekday, todayKey } from './dates.js';
  *  - count:  { total, deadline } → "1000 páginas" antes de una fecha
  *  - target: { start, value, deadline } → de 85 kg a 78 kg antes de una fecha
  *
+ * Rutina (routine), opcional y solo en check: ejercicios con series, reps y peso planificados.
+ * Las sesiones se guardan aparte en state.workouts (ver workouts.js).
+ *
  * En todos los tipos, un registro = un día. En un hábito "3 veces por semana", cada
  * registro es un día de esa semana; la semana se cumple al llegar a 3 días distintos.
  */
@@ -32,7 +36,10 @@ export const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#
 export const TEMPLATES = [
   { name: 'Meditar', emoji: '🧘', kind: 'check', schedule: { type: 'daily' } },
   { name: 'Leer', emoji: '📚', kind: 'count', unit: 'páginas', dailyGoal: 20, step: 5, schedule: { type: 'daily' } },
-  { name: 'Entrenar', emoji: '🏋️', kind: 'check', schedule: { type: 'weekly', times: 3 }, goal: { weeks: 12 } },
+  {
+    name: 'Entrenar', emoji: '🏋️', kind: 'check', schedule: { type: 'weekly', times: 3 }, goal: { weeks: 12 },
+    routine: [{ name: 'Sentadilla', sets: 3, reps: 8 }, { name: 'Press banca', sets: 3, reps: 8 }, { name: 'Remo con barra', sets: 3, reps: 10 }],
+  },
   { name: 'Agua', emoji: '💧', kind: 'count', unit: 'vasos', dailyGoal: 8, step: 1, schedule: { type: 'daily' } },
   { name: 'Peso', emoji: '⚖️', kind: 'target', unit: 'kg', schedule: { type: 'weekly', times: 1 }, goal: {} },
   { name: 'Correr', emoji: '🏃', kind: 'count', unit: 'km', dailyGoal: 5, step: 1, schedule: { type: 'days', days: [1, 3, 5] } },
@@ -52,6 +59,7 @@ export function createHabit(input, now = new Date()) {
     dailyGoal: kind === 'count' ? Number(input.dailyGoal) || 1 : null,
     step: kind === 'count' ? Number(input.step) || 1 : null,
     schedule: normalizeSchedule(input.schedule),
+    routine: kind === 'check' ? normalizeRoutine(input.routine) : [],
     goal: null,
     createdAt: input.createdAt || todayKey(now),
     archived: Boolean(input.archived),

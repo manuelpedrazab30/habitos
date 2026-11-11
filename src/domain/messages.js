@@ -2,6 +2,7 @@ import { addDays, diffDays, formatDate, WEEKDAYS } from './dates.js';
 import { isDone, isScheduled } from './habits.js';
 import { computeStreak, streakLabel } from './streaks.js';
 import { levelInfo, totalXp, XP } from './gamification.js';
+import { exerciseStats, setLabel, WEIGHT_STEP } from './workouts.js';
 import { DURATION_SUCCESS, durationProgress, improvementAreas, targetProjection, totalProjection, weekdayRates, weekStatus } from './stats.js';
 
 // Mensajes de motivación basados en datos: cada uno dice una distancia concreta
@@ -82,7 +83,46 @@ export function durationMessage(habit, p) {
   return `${head}; quedan ${u(p.remaining)} hasta el ${endTxt}. Para el ${goalPct} te faltan ${p.needed}: ${marginTxt}.`;
 }
 
-export function habitMessages(habit, log = {}, today) {
+/**
+ * Sobrecarga progresiva: qué ejercicios toca subir, cuáles están estancados y cuánto
+ * has progresado. Todo en kg concretos.
+ */
+export function overloadMessages(habit, workouts = {}, today) {
+  if (!habit.routine?.length) return [];
+  const out = [];
+  const name = `${habit.emoji} ${habit.name}`;
+  const stats = habit.routine.map((ex) => exerciseStats(ex, workouts, today)).filter((st) => st.count);
+
+  const ready = stats.filter((st) => st.suggestion !== null);
+  if (ready.length) {
+    const list = ready.map((st) => `${st.exercise.name} → ${fmt(st.suggestion)} kg`).join(', ');
+    const lead = ready.length === 1
+      ? `${ready[0].exercise.name}: completaste ${setLabel(ready[0].last, fmt)}. Prueba ${fmt(ready[0].suggestion)} kg en la próxima sesión.`
+      : `toca subir peso en ${ready.length} ejercicios: ${list}.`;
+    out.push({ kind: 'today', priority: 72, text: `${name}: ${lead}` });
+  }
+
+  stats.filter((st) => st.stalled && st.suggestion === null).slice(0, 2).forEach((st) => {
+    out.push({
+      kind: 'risk', priority: 60,
+      text: `${name}: ${st.exercise.name} lleva ${st.atWeight} sesiones en ${fmt(st.last.weight)} kg sin subir. Prueba ${fmt(st.last.weight + WEIGHT_STEP)} kg aunque hagas menos reps, o añade una serie.`,
+    });
+  });
+
+  const recentPR = stats.filter((st) => st.isPR && st.last.key >= addDays(today, -3));
+  if (recentPR.length) {
+    out.push({ kind: 'streak', priority: 45, text: `${name}: récord reciente en ${recentPR.map((st) => `${st.exercise.name} (${fmt(st.best)} kg)`).join(', ')}.` });
+  }
+
+  const gains = stats.filter((st) => st.change4w > 0).sort((a, b) => b.change4w / b.last.weight - a.change4w / a.last.weight);
+  if (gains.length) {
+    const g = gains[0];
+    out.push({ kind: 'insight', priority: 34, text: `${name}: ${g.exercise.name} subió ${fmt(g.change4w)} kg en las últimas 4 semanas (ahora ${fmt(g.last.weight)} kg).` });
+  }
+  return out.map((m, i) => ({ id: `${habit.id}:overload:${i}`, habitId: habit.id, ...m }));
+}
+
+export function habitMessages(habit, log = {}, today, workouts = {}) {
   const out = [];
   const name = `${habit.emoji} ${habit.name}`;
   const push = (kind, priority, text) => out.push({ id: `${habit.id}:${kind}:${out.length}`, habitId: habit.id, kind, priority, text });
@@ -135,12 +175,12 @@ export function habitMessages(habit, log = {}, today) {
     else if (s.current >= 3) push('streak', 40, `${name}: racha de ${streakLabel(s.current, 'día')} en juego hoy.`);
   }
 
-  return out;
+  return out.concat(overloadMessages(habit, workouts, today));
 }
 
 export function globalMessages(state, today) {
   const habits = state.habits.filter((h) => !h.archived);
-  const out = habits.flatMap((h) => habitMessages(h, state.entries[h.id], today));
+  const out = habits.flatMap((h) => habitMessages(h, state.entries[h.id], today, state.workouts?.[h.id]));
 
   // Nivel: traducir la XP que falta a acciones concretas
   const lv = levelInfo(totalXp(state, today));

@@ -4,7 +4,8 @@ import { createHabit, isDone, isScheduled, validateHabit } from '../src/domain/h
 import { computeStreak } from '../src/domain/streaks.js';
 import { habitXp, levelInfo, goalReached } from '../src/domain/gamification.js';
 import { completionRate, durationProgress, linearTrend, targetProjection, totalProjection, weekStatus, weekdayRates } from '../src/domain/stats.js';
-import { durationMessage, habitMessages, targetMessage } from '../src/domain/messages.js';
+import { durationMessage, habitMessages, overloadMessages, targetMessage } from '../src/domain/messages.js';
+import { bestWeights, exerciseStats, normalizeRoutine, prCount, prefillSession, setLabel } from '../src/domain/workouts.js';
 
 const T = '2026-11-11'; // miércoles
 const logOf = (keys, v = 1) => Object.fromEntries(keys.map((k) => [k, v]));
@@ -184,4 +185,55 @@ test('duration: lograda al 80% suma bonus de meta', () => {
   ok(goalReached(h, log));
   ok(durationProgress(h, log, T).reached);
   ok(habitXp(h, log, T) >= 250);
+});
+
+// ── Rutinas y sobrecarga progresiva
+const routine = [{ id: 'sq', name: 'Sentadilla', sets: 3, reps: 8 }, { id: 'bp', name: 'Press banca', sets: 3, reps: 8 }];
+const sess = (sq, bp, repsBp = 8) => [
+  { exerciseId: 'sq', name: 'Sentadilla', sets: 3, reps: 8, weight: sq },
+  { exerciseId: 'bp', name: 'Press banca', sets: 3, reps: repsBp, weight: bp },
+];
+test('workouts: rutina solo en hábitos sí/no y normalizada', () => {
+  const h = createHabit({ name: 'Entrenar', kind: 'check', routine: [{ name: ' Sentadilla ', sets: '3', reps: '8', weight: '' }, { name: '' }] });
+  eq(h.routine.length, 1);
+  eq([h.routine[0].name, h.routine[0].sets, h.routine[0].weight], ['Sentadilla', 3, null]);
+  eq(createHabit({ name: 'Leer', kind: 'count', routine: [{ name: 'x' }] }).routine, []);
+  eq(normalizeRoutine(null), []);
+});
+test('workouts: estadísticas de peso, estancamiento y sugerencia', () => {
+  const w = {
+    '2026-10-01': sess(60, 50, 6), '2026-10-08': sess(62.5, 50, 6), '2026-10-15': sess(65, 50, 7),
+    '2026-11-01': sess(67.5, 50, 7), '2026-11-10': sess(70, 50, 6),
+  };
+  const sq = exerciseStats(routine[0], w, T);
+  eq([sq.last.weight, sq.best, sq.change, sq.isPR, sq.suggestion], [70, 70, 10, true, 72.5]);
+  eq(sq.change4w, 7.5, 'frente a la sesión del 8 oct (la última ≥28 días antes)');
+  const bp = exerciseStats(routine[1], w, T);
+  eq([bp.atWeight, bp.stalled, bp.suggestion], [5, true, null]);
+  eq(prCount(w), 4);
+  eq(bestWeights(w), { sq: 70, bp: 50 });
+});
+test('workouts: la hoja se precarga con la última sesión o el plan', () => {
+  const w = { '2026-11-09': sess(80, 55) };
+  const rows = prefillSession(routine, w, T);
+  eq([rows[0].weight, rows[0].reps, rows[0].done], [80, 8, true]);
+  const fresh = prefillSession([{ id: 'dl', name: 'Peso muerto', sets: 3, reps: 5, weight: 100 }], w, T);
+  eq([fresh[0].weight, fresh[0].sets], [100, 3]);
+  eq(prefillSession(routine, w, '2026-11-09')[0].weight, 80, 'editar un día carga lo de ese día');
+  eq(setLabel({ sets: 3, reps: 8, weight: 60 }), '3×8 @ 60 kg');
+  eq(setLabel({ sets: 3, reps: 12, weight: null }), '3×12 @ peso corporal');
+});
+test('workouts: mensajes de sobrecarga concretos', () => {
+  const h = createHabit({ name: 'Entrenar', emoji: '🏋️', kind: 'check', routine });
+  h.routine[0].id = 'sq'; h.routine[1].id = 'bp';
+  const w = { '2026-10-20': sess(60, 50, 6), '2026-10-27': sess(60, 50, 6), '2026-11-03': sess(60, 50, 6), '2026-11-10': sess(60, 50, 6) };
+  const msgs = overloadMessages(h, w, T);
+  ok(msgs.some((m) => m.text.includes('Sentadilla: completaste 3×8 @ 60 kg. Prueba 62,5 kg')), JSON.stringify(msgs));
+  ok(msgs.some((m) => m.text.includes('Press banca lleva 4 sesiones en 50 kg')), JSON.stringify(msgs));
+});
+test('xp: cada récord de peso suma', () => {
+  const h = daily({ createdAt: '2026-11-09' });
+  const log = logOf(['2026-11-09', '2026-11-10']);
+  const w = { '2026-11-09': sess(60, 40), '2026-11-10': sess(62.5, 42.5) };
+  eq(habitXp(h, log, T, w) - habitXp(h, log, T), 30);
 });

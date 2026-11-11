@@ -6,6 +6,8 @@ import { completionRate, durationProgress, targetProjection, totalProjection, we
 import { durationMessage, fmt, habitMessages, pct, targetMessage, totalMessage } from '../domain/messages.js';
 import { h } from './dom.js';
 import { barChart, heatmap, lineChart } from './charts.js';
+import { exerciseStats, setLabel } from '../domain/workouts.js';
+import { openWorkoutSheet } from './workoutSheet.js';
 
 const LINE_RANGES = [['1m', '1 mes', 30], ['3m', '3 meses', 91], ['all', 'Todo', null]];
 
@@ -19,7 +21,8 @@ export function habitDetailView(state, ctx, id) {
   const rate30 = completionRate(habit, log, addDays(today, -29), today, today);
   const unitLabel = habit.kind === 'count' ? habit.unit : 'días hechos';
 
-  const extras = habitMessages(habit, log, today).filter((m) => m.kind !== 'goal');
+  const workouts = state.workouts?.[habit.id] || {};
+  const extras = habitMessages(habit, log, today, workouts).filter((m) => m.kind !== 'goal');
 
   return h('section', { class: 'view detail', style: { '--c': habit.color } },
     h('header', { class: 'detail-head' },
@@ -39,6 +42,7 @@ export function habitDetailView(state, ctx, id) {
 
     goalCard(habit, log, today),
     extras.length ? h('ul', { class: 'messages' }, extras.map((m) => h('li', { class: `msg ${m.kind}` }, m.text))) : null,
+    habit.routine?.length ? liftsCard(habit, workouts, today, ctx) : null,
     habit.kind === 'target' ? targetChart(habit, log, today, ctx) : null,
     habit.kind === 'count' ? weeklyChart(habit, log, today) : null,
     habit.kind === 'check' && habit.schedule.type === 'weekly' ? weeklyDaysChart(habit, log, today) : null,
@@ -138,6 +142,62 @@ function weeklyChart(habit, log, today) {
   );
 }
 
+/**
+ * Sobrecarga progresiva: tabla por ejercicio (peso actual, cambio en 4 semanas, récord,
+ * estado) + gráfica del peso por sesión del ejercicio elegido + últimas sesiones.
+ */
+function liftsCard(habit, workouts, today, ctx) {
+  const stats = habit.routine.map((ex) => exerciseStats(ex, workouts, today));
+  const withData = stats.filter((st) => st.count);
+  const register = h('button', { class: 'btn primary small', onClick: () => openWorkoutSheet(habit, today, ctx) }, '+ Sesión de hoy');
+  if (!withData.length) {
+    return h('div', { class: 'card' },
+      h('div', { class: 'card-head' }, h('h2', {}, 'Progresión de cargas'), register),
+      h('p', { class: 'muted' }, 'Registra tu primera sesión con pesos para ver tu progresión.'));
+  }
+  const sel = withData.find((st) => st.exercise.id === ctx.ui.exercise) || withData[0];
+  const signed = (n) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '=');
+  const status = (st) => {
+    if (st.suggestion !== null) return h('span', { class: 'tag up' }, `↑ ${fmt(st.suggestion)} kg`);
+    if (st.stalled) return h('span', { class: 'tag stall' }, `${st.atWeight} sesiones igual`);
+    if (st.isPR) return h('span', { class: 'tag up' }, 'Récord');
+    return h('span', { class: 'tag' }, `${st.atWeight} ${st.atWeight === 1 ? 'sesión' : 'sesiones'}`);
+  };
+
+  const from = minKey(sel.first.key, addDays(today, -13));
+  const recentSessions = Object.keys(workouts).sort().reverse().slice(0, 6);
+
+  return h('div', { class: 'card' },
+    h('div', { class: 'card-head' }, h('h2', {}, 'Progresión de cargas'), register),
+    h('table', { class: 'lift-table' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Ejercicio'), h('th', {}, 'Actual'), h('th', {}, '4 sem'), h('th', { class: 'hide-sm' }, 'Récord'), h('th', {}, 'Siguiente'))),
+      h('tbody', {}, withData.map((st) => h('tr', {
+        class: st === sel ? 'sel' : '', tabindex: 0, 'aria-label': `Ver gráfica de ${st.exercise.name}`,
+        onClick: () => { ctx.ui.exercise = st.exercise.id; ctx.rerender(); },
+        onKeydown: (e) => { if (e.key === 'Enter') { ctx.ui.exercise = st.exercise.id; ctx.rerender(); } },
+      },
+        h('td', {}, st.exercise.name),
+        h('td', {}, h('b', {}, `${fmt(st.last.weight)} kg`)),
+        h('td', { class: st.change4w > 0 ? 'delta up' : st.change4w < 0 ? 'delta down' : 'muted' }, st.change4w === null ? '—' : signed(st.change4w)),
+        h('td', { class: 'hide-sm' }, `${fmt(st.best)}`),
+        h('td', {}, status(st)),
+      ))),
+    ),
+    h('h3', { class: 'lift-title' }, `${sel.exercise.name}: peso por sesión`),
+    lineChart({ points: sel.history.map((x) => ({ key: x.key, value: x.weight })), unit: 'kg', color: habit.color, from, to: today }),
+    h('p', { class: 'muted small' },
+      sel.count > 1
+        ? `De ${fmt(sel.first.weight)} a ${fmt(sel.last.weight)} kg desde el ${formatDate(sel.first.key)} (${signed(sel.change)} kg${sel.changePct !== null ? `, ${sel.changePct >= 0 ? '+' : '−'}${Math.round(Math.abs(sel.changePct) * 100)}%` : ''}). Toca otro ejercicio de la tabla para cambiar.`
+        : 'Con más sesiones verás aquí la tendencia.'),
+    h('h3', { class: 'lift-title' }, 'Últimas sesiones'),
+    h('ul', { class: 'sessions' }, recentSessions.map((k) => h('li', {},
+      h('span', { class: 'when' }, formatDate(k)),
+      h('span', { class: 'what' }, workouts[k].map((i) => `${i.name || habit.routine.find((e) => e.id === i.exerciseId)?.name || '?'} ${setLabel(i, fmt)}`).join(' · ')),
+      h('button', { class: 'btn ghost small', onClick: () => openWorkoutSheet(habit, k, ctx) }, 'Editar'),
+    ))),
+  );
+}
+
 /** Días hechos por semana frente a los N comprometidos (hábitos sí/no semanales). */
 function weeklyDaysChart(habit, log, today) {
   const times = habit.schedule.times;
@@ -165,7 +225,9 @@ function historyCard(habit, log, today, ctx) {
     const v = log[key];
     const label = formatDate(key, { weekday: 'long', day: 'numeric', month: 'long' });
     let control;
-    if (habit.kind === 'check') {
+    if (habit.routine?.length) {
+      control = h('button', { class: 'btn primary', onClick: () => openWorkoutSheet(habit, key, ctx) }, isDone(habit, v) ? 'Ver / editar sesión' : 'Registrar sesión');
+    } else if (habit.kind === 'check') {
       const done = isDone(habit, v);
       control = h('button', { class: `btn ${done ? 'ghost' : 'primary'}`, onClick: () => ctx.logEntry(habit, key, done ? null : 1) }, done ? 'Desmarcar' : 'Marcar como hecho');
     } else {

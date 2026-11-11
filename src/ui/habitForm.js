@@ -36,6 +36,36 @@ export function habitFormView(state, ctx, id, params) {
 
   let errors = {};
 
+  // Rutina (sí/no): ejercicio · series · reps · peso. Editar no repinta (conserva el foco).
+  function routineFieldset() {
+    if (!Array.isArray(draft.routine)) draft.routine = [];
+    const rows = draft.routine;
+    // Cada campo va en un <label> con texto visible solo en el móvil (allí no hay fila de cabecera)
+    const cell = (i, key, attrs) => h('label', { class: `cell cell-${key}` },
+      h('span', { class: 'cell-label' }, attrs['aria-label']),
+      h('input', {
+        name: `ex-${i}-${key}`, value: rows[i][key] ?? '', ...attrs,
+        onInput: (e) => { rows[i][key] = key === 'name' ? e.target.value : (e.target.value === '' ? null : Number(e.target.value)); },
+      }));
+    return h('fieldset', {}, h('legend', {}, 'Rutina de ejercicios (opcional)'),
+      h('p', { class: 'muted' }, 'Al marcar una sesión podrás anotar series, reps y peso de cada ejercicio. Se sigue tu progresión de peso para aplicar sobrecarga progresiva.'),
+      rows.length ? h('div', { class: 'routine-head muted small' }, h('span', {}, 'Ejercicio'), h('span', {}, 'Series'), h('span', {}, 'Reps'), h('span', {}, 'Peso (kg)'), h('span', {})) : null,
+      rows.map((ex, i) => h('div', { class: 'routine-row' },
+        cell(i, 'name', { placeholder: 'Ej.: Sentadilla', 'aria-label': 'Ejercicio' }),
+        cell(i, 'sets', { type: 'number', inputmode: 'numeric', min: 1, placeholder: '3', 'aria-label': 'Series' }),
+        cell(i, 'reps', { type: 'number', inputmode: 'numeric', min: 1, placeholder: '8', 'aria-label': 'Reps' }),
+        cell(i, 'weight', { type: 'number', inputmode: 'decimal', step: 'any', min: 0, placeholder: '—', 'aria-label': 'Peso (kg)' }),
+        h('button', { type: 'button', class: 'icon-btn small', 'aria-label': `Quitar ${ex.name || 'ejercicio'}`, onClick: () => { rows.splice(i, 1); paint(); } }, '✕'),
+      )),
+      h('button', { type: 'button', class: 'btn ghost', onClick: () => {
+        rows.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name: '', sets: rows.at(-1)?.sets ?? 3, reps: rows.at(-1)?.reps ?? 8, weight: null });
+        paint();
+        form.querySelector(`[name="ex-${rows.length - 1}-name"]`)?.focus();
+      } }, '+ Añadir ejercicio'),
+      rows.length ? h('small', { class: 'muted' }, 'Reps = objetivo por serie. Cuando lo completes con un peso, te diré que subas 2,5 kg. Peso vacío = peso corporal.') : null,
+    );
+  }
+
   // Meta de duración (sí/no): "durante N semanas" ⇄ fecha de fin, sincronizados sin repintar
   function durationFieldset() {
     const g = draft.goal;
@@ -128,6 +158,8 @@ export function habitFormView(state, ctx, id, params) {
           h('button', { type: 'button', class: 'step', onClick: () => { draft.schedule.times = Math.min(7, draft.schedule.times + 1); paint(); } }, '+'),
         ) : null,
       ),
+
+      draft.kind === 'check' ? routineFieldset() : null,
 
       draft.kind === 'check' ? durationFieldset() : h('fieldset', {}, h('legend', {}, draft.kind === 'target' ? 'Objetivo' : 'Meta con plazo (opcional)'),
         draft.kind === 'target'

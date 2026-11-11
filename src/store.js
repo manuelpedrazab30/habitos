@@ -1,19 +1,21 @@
 import { createHabit } from './domain/habits.js';
+import { normalizeSession } from './domain/workouts.js';
 
 // Estado único de la app, persistido en localStorage. Todo lo derivado (rachas, XP,
 // niveles, estadísticas) se calcula al vuelo desde aquí y NO se guarda.
 //
 // state = {
-//   version: 2,
+//   version: 3,
 //   habits: Habit[],                                  // ver domain/habits.js
 //   entries: { [habitId]: { 'YYYY-MM-DD': number } }, // un valor por hábito y día
+//   workouts: { [habitId]: { 'YYYY-MM-DD': Set[] } }, // detalle de sesiones (domain/workouts.js)
 //   settings: {}
 // }
 
 export const STORAGE_KEY = 'habitos.state';
-export const VERSION = 2;
+export const VERSION = 3;
 
-const empty = () => ({ version: VERSION, habits: [], entries: {}, settings: {} });
+const empty = () => ({ version: VERSION, habits: [], entries: {}, workouts: {}, settings: {} });
 
 /** Punto único para migrar datos antiguos cuando cambie el esquema (subir VERSION y añadir un paso). */
 export function migrate(raw) {
@@ -22,7 +24,9 @@ export function migrate(raw) {
   // v1 → v2: los hábitos sí/no pasan de meta por número de veces (goal.total) a meta de
   // duración (goal.from + goal.deadline). createHabit() descarta `total` y fija `from`.
   s.habits = (s.habits || []).map((h) => createHabit(h));
+  // v2 → v3: rutinas (habit.routine) y sesiones de entrenamiento (state.workouts)
   s.entries = s.entries && typeof s.entries === 'object' ? s.entries : {};
+  s.workouts = s.workouts && typeof s.workouts === 'object' ? s.workouts : {};
   s.version = VERSION;
   return s;
 }
@@ -78,17 +82,40 @@ export function createStore(storage = globalThis.localStorage) {
     deleteHabit(id) {
       const before = state;
       const entries = { ...state.entries };
+      const workouts = { ...state.workouts };
       delete entries[id];
-      commit({ ...state, habits: state.habits.filter((h) => h.id !== id), entries }, () => commit(before));
+      delete workouts[id];
+      commit({ ...state, habits: state.habits.filter((h) => h.id !== id), entries, workouts }, () => commit(before));
     },
 
-    /** value null/undefined borra el registro del día. */
+    /** value null/undefined borra el registro del día (y su sesión de entrenamiento, si la hay). */
     setEntry(habitId, key, value) {
       const before = state;
       const log = { ...(state.entries[habitId] || {}) };
-      if (value === null || value === undefined || Number.isNaN(value)) delete log[key];
-      else log[key] = value;
-      commit({ ...state, entries: { ...state.entries, [habitId]: log } }, () => commit(before));
+      let workouts = state.workouts;
+      if (value === null || value === undefined || Number.isNaN(value)) {
+        delete log[key];
+        if (state.workouts[habitId]?.[key]) {
+          const w = { ...state.workouts[habitId] };
+          delete w[key];
+          workouts = { ...state.workouts, [habitId]: w };
+        }
+      } else log[key] = value;
+      commit({ ...state, entries: { ...state.entries, [habitId]: log }, workouts }, () => commit(before));
+    },
+
+    /** Guarda la sesión de un día y marca el día como hecho. items vacío = solo marcar. */
+    setWorkout(habitId, key, items) {
+      const before = state;
+      const w = { ...(state.workouts[habitId] || {}) };
+      const session = normalizeSession(items);
+      if (session.length) w[key] = session;
+      else delete w[key];
+      commit({
+        ...state,
+        entries: { ...state.entries, [habitId]: { ...(state.entries[habitId] || {}), [key]: 1 } },
+        workouts: { ...state.workouts, [habitId]: w },
+      }, () => commit(before));
     },
 
     undo() {

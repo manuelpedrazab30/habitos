@@ -2,6 +2,7 @@ import { dateRange } from './dates.js';
 import { accumulated, isDone, isScheduled, targetDirection } from './habits.js';
 import { doneDaysByWeek, habitStart } from './streaks.js';
 import { durationProgress } from './stats.js';
+import { PR_XP, prCount } from './workouts.js';
 
 // La XP se DERIVA siempre del historial (nunca se guarda): deshacer un registro o
 // rellenar días pasados deja la XP coherente sin migraciones ni contadores.
@@ -15,7 +16,7 @@ export const XP = {
   goalReached: 250, // meta con plazo alcanzada
 };
 
-export function habitXp(habit, log = {}, today) {
+export function habitXp(habit, log = {}, today, workouts = {}) {
   const start = habitStart(habit, log);
   if (start > today) return 0;
   let xp = 0;
@@ -44,6 +45,7 @@ export function habitXp(habit, log = {}, today) {
   }
 
   if (goalReached(habit, log)) xp += XP.goalReached;
+  xp += PR_XP * prCount(workouts); // récords de peso (sobrecarga progresiva)
   return xp;
 }
 
@@ -60,7 +62,7 @@ export function goalReached(habit, log = {}) {
 }
 
 export function totalXp(state, today) {
-  return state.habits.reduce((acc, h) => acc + habitXp(h, state.entries[h.id], today), 0);
+  return state.habits.reduce((acc, h) => acc + habitXp(h, state.entries[h.id], today, state.workouts?.[h.id]), 0);
 }
 
 /** XP acumulada necesaria para alcanzar el nivel n. Nivel 2 = 100, 3 = 300, 4 = 600… */
