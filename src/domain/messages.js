@@ -2,7 +2,7 @@ import { addDays, diffDays, formatDate, WEEKDAYS } from './dates.js';
 import { isDone, isScheduled } from './habits.js';
 import { computeStreak, streakLabel } from './streaks.js';
 import { levelInfo, totalXp, XP } from './gamification.js';
-import { improvementAreas, targetProjection, totalProjection, weekdayRates, weekStatus } from './stats.js';
+import { DURATION_SUCCESS, durationProgress, improvementAreas, targetProjection, totalProjection, weekdayRates, weekStatus } from './stats.js';
 
 // Mensajes de motivación basados en datos: cada uno dice una distancia concreta
 // (tiempo, cantidad, días de racha) en lugar de frases genéricas.
@@ -57,6 +57,31 @@ export function totalMessage(habit, p) {
   return head;
 }
 
+export function durationMessage(habit, p) {
+  const u = (n) => plural(n, p.unit, `${p.unit}s`);
+  const unitPl = `${p.unit}s`;
+  const goalPct = pct(DURATION_SUCCESS);
+  const fem = p.unit === 'semana'; // concordancia: semanas cumplidas / días cumplidos
+  const cumplidas = fem ? 'cumplidas' : 'cumplidos';
+  const endTxt = formatDate(p.end);
+  if (!p.started) return `Tu meta empieza el ${formatDate(p.from)}: ${u(p.total)} hasta el ${endTxt}.`;
+  if (p.ended) {
+    return p.reached
+      ? `Meta completada: cumpliste ${p.met} de ${u(p.total)} (${pct(p.progress)}).`
+      : `La meta terminó el ${endTxt} con ${p.met} de ${u(p.total)} ${cumplidas} (${pct(p.progress)}); el objetivo era el ${goalPct}.`;
+  }
+  const head = `Llevas ${p.met} de ${u(p.total)} ${cumplidas}`;
+  if (p.reached) {
+    return `Meta asegurada: ${head.charAt(0).toLowerCase()}${head.slice(1)} (${pct(p.progress)}).${p.remaining ? ` Quedan ${u(p.remaining)} hasta el ${endTxt} para cerrarla al ${pct((p.met + p.remaining) / p.total)}.` : ''}`;
+  }
+  if (p.failed) {
+    return `${head} y quedan ${p.remaining}: ya no llegas al ${goalPct}, pero aún puedes terminar en ${p.met + p.remaining}/${p.total} (${pct((p.met + p.remaining) / p.total)}).`;
+  }
+  const margin = p.remaining - p.needed;
+  const marginTxt = margin === 0 ? `necesitas ${fem ? 'todas las' : 'todos los'} ${unitPl} que quedan` : `puedes fallar ${margin === 1 ? `1 ${p.unit}` : `${margin} ${unitPl}`} más como mucho`;
+  return `${head}; quedan ${u(p.remaining)} hasta el ${endTxt}. Para el ${goalPct} te faltan ${p.needed}: ${marginTxt}.`;
+}
+
 export function habitMessages(habit, log = {}, today) {
   const out = [];
   const name = `${habit.emoji} ${habit.name}`;
@@ -72,7 +97,11 @@ export function habitMessages(habit, log = {}, today) {
       const since = diffDays(last.key, today);
       if (since > expectedGap + 1) push('risk', 70, `${name}: tu última medición fue hace ${days(since)}; sin datos nuevos la proyección se queda desfasada.`);
     }
-  } else if (habit.goal.total) {
+  } else if (habit.kind === 'check' && habit.goal.deadline) {
+    const p = durationProgress(habit, log, today);
+    const tight = !p.reached && !p.failed && p.remaining - p.needed <= 1;
+    push('goal', tight ? 80 : 55, `${name}: ${durationMessage(habit, p)}`);
+  } else if (habit.kind === 'count' && habit.goal.total) {
     const p = totalProjection(habit, log, today);
     push('goal', p.onTrack === false ? 80 : 55, `${name}: ${totalMessage(habit, p)}`);
   }

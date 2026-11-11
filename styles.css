@@ -148,6 +148,17 @@ main { max-width: 760px; margin: 0 auto; padding: 4px 16px 24px; }
 .measure-wrap { position: relative; display: flex; align-items: center; gap: 6px; flex: none; }
 input.measure { width: 92px; text-align: right; }
 .unit { color: var(--muted); font-size: 0.85rem; }
+.habit-card.has-strip { flex-wrap: wrap; row-gap: 4px; }
+.week-strip { position: relative; flex-basis: 100%; display: flex; align-items: center; gap: 5px; padding-left: calc(2.2rem + 10px); }
+.wd {
+  width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1.5px solid transparent; padding: 0;
+}
+.wd.on { background: var(--c); color: white; }
+.wd.sel { border-color: var(--text); }
+.wd.future { opacity: 0.4; }
+.wk-count { margin-left: 6px; font-size: 0.8rem; color: var(--muted); }
+.wk-count.met { color: var(--good); font-weight: 600; }
 details.other summary { cursor: pointer; color: var(--muted); padding: 6px 2px; margin-bottom: 8px; }
 
 .empty { text-align: center; padding-top: 24px; align-items: center; }
@@ -219,6 +230,17 @@ input, select {
 .goal-row { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted); font-size: 0.85rem; }
 .goal-row strong { color: var(--text); font-size: 1.2rem; }
 .goal-card .bar > span { background: var(--c); }
+.duration-bar { position: relative; display: flex; height: 12px; border-radius: 99px; overflow: hidden; background: var(--surface-2); }
+.duration-bar .seg-met { background: var(--c); }
+.duration-bar .seg-missed { background: color-mix(in srgb, var(--bad) 55%, var(--surface-2)); }
+.duration-bar .seg-left { background: var(--surface-2); }
+.duration-bar .mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); }
+.legend { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; }
+.legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-left: 6px; }
+.legend .dot:first-child { margin-left: 0; }
+.legend .dot.met { background: var(--c); }
+.legend .dot.missed { background: color-mix(in srgb, var(--bad) 55%, var(--surface-2)); }
+.legend .dot.left { background: var(--surface-2); border: 1px solid var(--border); }
 .day-editor { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .day-editor:empty { display: none; }
 form.inline { display: flex; gap: 6px; }

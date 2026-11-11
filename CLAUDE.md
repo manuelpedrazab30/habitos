@@ -14,9 +14,9 @@ App web de seguimiento de hábitos (UI en español). Objetivos de producto que g
 No hay build, ni npm, ni dependencias: es JavaScript con módulos ES nativos. Node **no** está instalado en esta máquina.
 
 ```bash
-python3 -m http.server 5173        # servir la app → http://localhost:5173
+python3 serve.py        # servir la app → http://localhost:5173 (puerto opcional como argumento)
 ```
-(También está en `.claude/launch.json` como `habitos` para el panel de preview.) Los módulos ES necesitan HTTP; abrir `index.html` con `file://` no funciona.
+(También está en `.claude/launch.json` como `habitos` para el panel de preview.) Los módulos ES necesitan HTTP; abrir `index.html` con `file://` no funciona. `serve.py` es `http.server` con `Cache-Control: no-store`: con `python3 -m http.server` el navegador reutiliza módulos antiguos tras editar y aparecen errores como "does not provide an export named …".
 
 **Tests**: abrir `http://localhost:5173/tests/index.html` en el navegador. Runner propio en `tests/runner.js` (`test`, `eq`, `ok`, `near`).
 - Un solo test o grupo: `tests/index.html?grep=streaks` (filtra por subcadena del nombre).
@@ -38,9 +38,13 @@ src/demo.js   datos de ejemplo (botón en el estado vacío)
 - `state = { version, habits: Habit[], entries: { [habitId]: { 'YYYY-MM-DD': number } }, settings }`. Un valor por hábito y día; `setEntry(id, key, null)` borra.
 - Tres `kind` de hábito: `check` (valor 1), `count` (cantidad con `dailyGoal`), `target` (medición que va hacia `goal.value` desde `goal.start`; la dirección subir/bajar se infiere).
 - Tres `schedule`: `daily`, `days` (días concretos, 0 = lunes) y `weekly` (N veces por semana, cualquier día). Casi toda la lógica de rachas/estadísticas se bifurca entre "semanal" y "diario/días concretos".
-- `goal` opcional con `deadline`: `total` para check/count, `start`/`value` para target.
+- Un registro = un día, en todos los tipos. En un hábito "3 veces por semana" cada registro es un día concreto de esa semana (la tarjeta de Hoy muestra la tira L–D con los días hechos); la semana se cumple con N días distintos.
+- `goal` opcional con `deadline`, distinto según el tipo:
+  - `check`: meta de **duración**, no de número de veces: `{ from, deadline }` ("3 veces/semana durante 12 semanas"). El formulario acepta semanas o fecha de fin (y las plantillas `goal.weeks`); se guarda solo `from` + `deadline`.
+  - `count`: `{ total, deadline }` (cantidad acumulada).
+  - `target`: `{ start, value, deadline }`.
 - `createHabit()` es el normalizador único: lo usan el formulario, `updateHabit`, la importación y `migrate()`. Si añades un campo, añádelo ahí.
-- Cambios de esquema: subir `VERSION` y añadir un paso en `migrate()` en `store.js`.
+- Cambios de esquema: subir `VERSION` y añadir un paso en `migrate()` en `store.js`. v2 eliminó `goal.total` de los hábitos `check`.
 
 ### Principio clave: todo lo derivado se calcula, nunca se guarda
 Rachas, XP, niveles, estadísticas y mensajes se recalculan desde `entries` en cada render. Así, deshacer un registro o rellenar días pasados deja todo coherente sin contadores que sincronizar. No persistas XP ni rachas.
@@ -54,6 +58,7 @@ Los días son claves locales `'YYYY-MM-DD'`, comparables como strings. Usa siemp
 - Los registros anteriores a `createdAt` cuentan (`habitStart()` = mínimo entre creación y primer registro).
 - XP (`gamification.js`): base 10 + bonus por racha previa (tope 10 días), bonus por semana cumplida en hábitos semanales, +250 al alcanzar una meta. Nivel n requiere `50·n·(n−1)` XP.
 - Proyecciones (`stats.js`): target = regresión lineal sobre las mediciones de los últimos 42 días; meta de total = media diaria de los últimos 14 días.
+- Metas de duración (`durationProgress` en `stats.js`): cada periodo (semana en hábitos semanales, día programado en el resto) es cumplido, fallado (pasado sin cumplir) o restante (el actual y los futuros). La meta se logra con `DURATION_SUCCESS` (80 %) de periodos cumplidos, aunque no haya terminado el plazo. Los mensajes dicen cuántos periodos faltan y cuánto margen de fallo queda.
 - `messages.js` genera mensajes `{kind, priority, text}`; la vista Hoy muestra los 3 de mayor prioridad. Un mensaje nuevo debe citar una cifra concreta (distancia, fecha, ritmo necesario vs. actual).
 
 ### UI

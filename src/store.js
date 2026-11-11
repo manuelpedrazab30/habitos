@@ -4,14 +4,14 @@ import { createHabit } from './domain/habits.js';
 // niveles, estadísticas) se calcula al vuelo desde aquí y NO se guarda.
 //
 // state = {
-//   version: 1,
+//   version: 2,
 //   habits: Habit[],                                  // ver domain/habits.js
 //   entries: { [habitId]: { 'YYYY-MM-DD': number } }, // un valor por hábito y día
 //   settings: {}
 // }
 
 export const STORAGE_KEY = 'habitos.state';
-export const VERSION = 1;
+export const VERSION = 2;
 
 const empty = () => ({ version: VERSION, habits: [], entries: {}, settings: {} });
 
@@ -19,7 +19,8 @@ const empty = () => ({ version: VERSION, habits: [], entries: {}, settings: {} }
 export function migrate(raw) {
   if (!raw || typeof raw !== 'object') return empty();
   const s = { ...empty(), ...raw };
-  // if (s.version < 2) { …; s.version = 2; }
+  // v1 → v2: los hábitos sí/no pasan de meta por número de veces (goal.total) a meta de
+  // duración (goal.from + goal.deadline). createHabit() descarta `total` y fija `from`.
   s.habits = (s.habits || []).map((h) => createHabit(h));
   s.entries = s.entries && typeof s.entries === 'object' ? s.entries : {};
   s.version = VERSION;

@@ -3,8 +3,8 @@ import { addDays, dateRange, diffDays, weekday, weekStart } from '../src/domain/
 import { createHabit, isDone, isScheduled, validateHabit } from '../src/domain/habits.js';
 import { computeStreak } from '../src/domain/streaks.js';
 import { habitXp, levelInfo, goalReached } from '../src/domain/gamification.js';
-import { completionRate, linearTrend, targetProjection, totalProjection, weekStatus, weekdayRates } from '../src/domain/stats.js';
-import { habitMessages, targetMessage } from '../src/domain/messages.js';
+import { completionRate, durationProgress, linearTrend, targetProjection, totalProjection, weekStatus, weekdayRates } from '../src/domain/stats.js';
+import { durationMessage, habitMessages, targetMessage } from '../src/domain/messages.js';
 
 const T = '2026-11-11'; // miércoles
 const logOf = (keys, v = 1) => Object.fromEntries(keys.map((k) => [k, v]));
@@ -147,4 +147,41 @@ test('messages: semanal con todos los días restantes necesarios', () => {
   const h = daily({ schedule: { type: 'weekly', times: 5 } });
   const msgs = habitMessages(h, {}, T); // miércoles: quedan 5 días (incluido hoy), faltan 5
   ok(msgs.some((m) => m.kind === 'risk' && m.text.includes('necesitas todos')), JSON.stringify(msgs));
+});
+
+// ── Metas de duración (hábitos sí/no) y registros semanales por día
+test('habits: meta de sí/no es de duración, no de número de veces', () => {
+  const h = createHabit({ name: 'Entrenar', kind: 'check', goal: { weeks: 12 }, createdAt: T });
+  eq(h.goal, { from: T, deadline: addDays(T, 83) });
+  const legacy = createHabit({ name: 'x', kind: 'check', goal: { total: 60 }, createdAt: T });
+  eq(legacy.goal, { from: null, deadline: null }, 'migración v1: se descarta total');
+  ok(validateHabit(createHabit({ name: 'x', kind: 'check', goal: { from: T, deadline: addDays(T, -1) } })).deadline);
+});
+test('weekly: cada registro es un día distinto de la semana', () => {
+  const h = daily({ schedule: { type: 'weekly', times: 3 } });
+  eq(weekStatus(h, logOf(['2026-11-09', '2026-11-10']), T).done, 2);
+  eq(weekStatus(h, logOf(['2026-11-09', '2026-11-10', T]), T).met, true);
+});
+test('duration: semanal cuenta semanas cumplidas, falladas y restantes', () => {
+  const h = daily({ schedule: { type: 'weekly', times: 3 }, createdAt: '2026-10-19', goal: { from: '2026-10-19', weeks: 4 } });
+  eq(h.goal.deadline, '2026-11-15');
+  const log = logOf(['2026-10-19', '2026-10-21', '2026-10-23', '2026-10-28', '2026-11-02', '2026-11-04', '2026-11-06', '2026-11-10']);
+  const p = durationProgress(h, log, T);
+  eq([p.unit, p.total, p.met, p.missed, p.remaining, p.required, p.failed], ['semana', 4, 2, 1, 1, 4, true]);
+});
+test('duration: diaria y mensaje con margen concreto', () => {
+  const h = daily({ createdAt: addDays(T, -9), goal: { from: addDays(T, -9), deadline: addDays(T, 10) } });
+  const past = dateRange(addDays(T, -9), addDays(T, -1)).slice(1); // 8 de 9 días pasados
+  const p = durationProgress(h, logOf(past), T);
+  eq([p.total, p.met, p.missed, p.remaining, p.required, p.needed, p.reached, p.failed], [20, 8, 1, 11, 16, 8, false, false]);
+  const msg = durationMessage(h, p);
+  ok(msg.includes('Llevas 8 de 20 días cumplidos'), msg);
+  ok(msg.includes('puedes fallar 3 días más'), msg);
+});
+test('duration: lograda al 80% suma bonus de meta', () => {
+  const h = daily({ schedule: { type: 'weekly', times: 1 }, createdAt: '2026-11-02', goal: { from: '2026-11-02', weeks: 2 } });
+  const log = logOf(['2026-11-03', '2026-11-10']);
+  ok(goalReached(h, log));
+  ok(durationProgress(h, log, T).reached);
+  ok(habitXp(h, log, T) >= 250);
 });

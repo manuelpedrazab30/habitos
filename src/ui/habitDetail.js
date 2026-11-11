@@ -1,9 +1,9 @@
 import { addDays, diffDays, formatDate, maxKey, minKey } from '../domain/dates.js';
-import { isDone, isScheduled, scheduleLabel } from '../domain/habits.js';
+import { accumulated, isDone, isScheduled, scheduleLabel } from '../domain/habits.js';
 import { computeStreak, habitStart, streakLabel } from '../domain/streaks.js';
-import { accumulated, habitXp } from '../domain/gamification.js';
-import { completionRate, targetProjection, totalProjection, weeklyTotals } from '../domain/stats.js';
-import { fmt, habitMessages, pct, targetMessage, totalMessage } from '../domain/messages.js';
+import { habitXp } from '../domain/gamification.js';
+import { completionRate, durationProgress, targetProjection, totalProjection, weeklyTotals } from '../domain/stats.js';
+import { durationMessage, fmt, habitMessages, pct, targetMessage, totalMessage } from '../domain/messages.js';
 import { h } from './dom.js';
 import { barChart, heatmap, lineChart } from './charts.js';
 
@@ -17,7 +17,7 @@ export function habitDetailView(state, ctx, id) {
   const log = state.entries[habit.id] || {};
   const streak = computeStreak(habit, log, today);
   const rate30 = completionRate(habit, log, addDays(today, -29), today, today);
-  const unitLabel = habit.kind === 'count' ? habit.unit : 'días';
+  const unitLabel = habit.kind === 'count' ? habit.unit : 'días hechos';
 
   const extras = habitMessages(habit, log, today).filter((m) => m.kind !== 'goal');
 
@@ -41,6 +41,7 @@ export function habitDetailView(state, ctx, id) {
     extras.length ? h('ul', { class: 'messages' }, extras.map((m) => h('li', { class: `msg ${m.kind}` }, m.text))) : null,
     habit.kind === 'target' ? targetChart(habit, log, today, ctx) : null,
     habit.kind === 'count' ? weeklyChart(habit, log, today) : null,
+    habit.kind === 'check' && habit.schedule.type === 'weekly' ? weeklyDaysChart(habit, log, today) : null,
     historyCard(habit, log, today, ctx),
   );
 }
@@ -57,6 +58,29 @@ function goalCard(habit, log, today) {
       h('div', { class: 'bar big' }, h('span', { style: { width: pct(p.progress) } })),
       h('p', {}, targetMessage(habit, p, today)),
       habit.goal.deadline ? h('p', { class: 'muted small' }, `Plazo: ${formatDate(habit.goal.deadline, { day: 'numeric', month: 'long', year: 'numeric' })}${p.daysLeft !== null && p.daysLeft >= 0 ? ` · quedan ${p.daysLeft} días` : ''}`) : null,
+    );
+  }
+  const d = durationProgress(habit, log, today);
+  if (d) {
+    const plural = (n) => `${n} ${d.unit}${n === 1 ? '' : 's'}`;
+    return h('div', { class: 'card goal-card' },
+      h('div', { class: 'goal-row' },
+        h('span', {}, formatDate(d.from)),
+        h('strong', {}, `${d.met} / ${plural(d.total)}`),
+        h('span', {}, formatDate(d.end)),
+      ),
+      // Segmentos: cumplidas · falladas · restantes, con marca del 80 % necesario
+      h('div', { class: 'duration-bar', title: `Cumplidas ${d.met} · falladas ${d.missed} · quedan ${d.remaining}` },
+        h('span', { class: 'seg-met', style: { flex: d.met } }),
+        h('span', { class: 'seg-missed', style: { flex: d.missed } }),
+        h('span', { class: 'seg-left', style: { flex: d.remaining } }),
+        h('i', { class: 'mark', style: { left: pct(d.required / d.total) } }),
+      ),
+      h('p', { class: 'muted small legend' },
+        h('span', { class: 'dot met' }), `Cumplidas ${d.met}`, h('span', { class: 'dot missed' }), `Falladas ${d.missed}`, h('span', { class: 'dot left' }), `Quedan ${d.remaining}`,
+        ` · Meta: ${d.required} de ${d.total}`),
+      h('p', {}, durationMessage(habit, d)),
+      !d.ended && d.daysLeft >= 0 ? h('p', { class: 'muted small' }, `Termina el ${formatDate(d.end, { day: 'numeric', month: 'long', year: 'numeric' })} · quedan ${d.daysLeft + 1} días`) : null,
     );
   }
   const p = totalProjection(habit, log, today);
@@ -110,6 +134,23 @@ function weeklyChart(habit, log, today) {
     barChart({
       bars: weeks.map((w) => ({ label: formatDate(w.week, { day: 'numeric', month: 'numeric' }), value: w.value, tip: `<b>Semana del ${formatDate(w.week)}</b><br>${fmt(w.value)} ${habit.unit} · ${pct(w.value / perWeekGoal)} de lo esperado` })),
       color: habit.color, goal: perWeekGoal,
+    }),
+  );
+}
+
+/** Días hechos por semana frente a los N comprometidos (hábitos sí/no semanales). */
+function weeklyDaysChart(habit, log, today) {
+  const times = habit.schedule.times;
+  const weeks = weeklyTotals(habit, log, 12, today);
+  return h('div', { class: 'card' },
+    h('h2', {}, 'Días por semana'),
+    h('p', { class: 'muted small' }, `Cada registro es un día. Línea: tu compromiso de ${times} ${times === 1 ? 'día' : 'días'} por semana.`),
+    barChart({
+      bars: weeks.map((w) => ({
+        label: formatDate(w.week, { day: 'numeric', month: 'numeric' }), value: w.value, highlight: w.value < times && w.week < addDays(today, -6),
+        tip: `<b>Semana del ${formatDate(w.week)}</b><br>${w.value} de ${times} días${w.value >= times ? ' · cumplida' : ''}`,
+      })),
+      color: habit.color, goal: times, max: 7, format: (v) => String(v),
     }),
   );
 }

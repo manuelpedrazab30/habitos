@@ -1,5 +1,6 @@
-import { COLORS, createHabit, KINDS, TEMPLATES, validateHabit } from '../domain/habits.js';
-import { WEEKDAYS_SHORT } from '../domain/dates.js';
+import { COLORS, createHabit, durationWeeks, KINDS, TEMPLATES, validateHabit } from '../domain/habits.js';
+import { addDays, formatDate, WEEKDAYS_SHORT } from '../domain/dates.js';
+import { DURATION_SUCCESS } from '../domain/stats.js';
 import { h, toast } from './dom.js';
 
 const EMOJIS = ['✨', '🧘', '📚', '🏋️', '💧', '⚖️', '🏃', '🥗', '😴', '✍️', '🎸', '💻', '🚭', '🧠', '🚴', '💰'];
@@ -34,6 +35,43 @@ export function habitFormView(state, ctx, id, params) {
   });
 
   let errors = {};
+
+  // Meta de duración (sí/no): "durante N semanas" ⇄ fecha de fin, sincronizados sin repintar
+  function durationFieldset() {
+    const g = draft.goal;
+    const weekly = draft.schedule.type === 'weekly';
+    const summary = h('p', { class: 'muted small' });
+    const weeksInput = numInput(durationWeeks(g), (n) => { setWeeks(n); dateInput.value = g.deadline || ''; refresh(); }, { name: 'weeks', min: 1, step: 1, placeholder: 'Ej.: 12' });
+    const dateInput = h('input', { type: 'date', name: 'deadline', value: g.deadline || '', onInput: (e) => {
+      g.deadline = e.target.value || null;
+      if (g.deadline && !g.from) g.from = ctx.today();
+      weeksInput.value = durationWeeks(g) ?? '';
+      refresh();
+    } });
+    function setWeeks(n) {
+      if (!n || n < 1) { g.deadline = null; return; }
+      if (!g.from) g.from = ctx.today();
+      g.deadline = addDays(g.from, Math.round(n) * 7 - 1);
+    }
+    function refresh() {
+      if (!g.deadline) { summary.textContent = 'Déjalo vacío si solo quieres mantener el hábito, sin fecha de fin.'; return; }
+      const per = weekly ? `una semana cuenta si llegas a ${draft.schedule.times} ${draft.schedule.times === 1 ? 'día' : 'días distintos'}` : 'cada día programado cuenta por separado';
+      summary.textContent = `Del ${formatDate(g.from)} al ${formatDate(g.deadline, { day: 'numeric', month: 'short', year: 'numeric' })}. La meta se logra cumpliendo el ${Math.round(DURATION_SUCCESS * 100)}% ${weekly ? 'de las semanas' : 'de los días'}; ${per}.`;
+    }
+    refresh();
+    return h('fieldset', {}, h('legend', {}, 'Meta de duración (opcional)'),
+      h('p', { class: 'muted' }, '¿Durante cuánto tiempo quieres mantenerlo?'),
+      h('div', { class: 'chips' }, [4, 8, 12, 26].map((n) => h('button', {
+        type: 'button', class: `chip ${durationWeeks(g) === n ? 'on' : ''}`,
+        onClick: () => { setWeeks(n); paint(); },
+      }, `${n} semanas`))),
+      h('div', { class: 'row' },
+        field('Durante (semanas)', weeksInput),
+        field('Hasta', dateInput, { error: errors.deadline }),
+      ),
+      summary,
+    );
+  }
 
   function paint() {
     const focusedName = document.activeElement?.name;
@@ -91,14 +129,14 @@ export function habitFormView(state, ctx, id, params) {
         ) : null,
       ),
 
-      h('fieldset', {}, h('legend', {}, draft.kind === 'target' ? 'Objetivo' : 'Meta con plazo (opcional)'),
+      draft.kind === 'check' ? durationFieldset() : h('fieldset', {}, h('legend', {}, draft.kind === 'target' ? 'Objetivo' : 'Meta con plazo (opcional)'),
         draft.kind === 'target'
           ? h('div', { class: 'row' },
             field(`Valor actual${draft.unit ? ` (${draft.unit})` : ''}`, numInput(draft.goal.start, (v) => { draft.goal.start = v; }, { name: 'start' }), { error: errors.goalStart }),
             field(`Quiero llegar a${draft.unit ? ` (${draft.unit})` : ''}`, numInput(draft.goal.value, (v) => { draft.goal.value = v; }, { name: 'goalValue' }), { error: errors.goalValue }),
           )
-          : field(draft.kind === 'count' ? `Total a acumular${draft.unit ? ` (${draft.unit})` : ''}` : 'Número de veces',
-            numInput(draft.goal.total, (v) => { draft.goal.total = v; }, { name: 'total', min: 0, placeholder: draft.kind === 'count' ? 'Ej.: 1000' : 'Ej.: 60' }),
+          : field(`Total a acumular${draft.unit ? ` (${draft.unit})` : ''}`,
+            numInput(draft.goal.total, (v) => { draft.goal.total = v; }, { name: 'total', min: 0, placeholder: 'Ej.: 1000' }),
             { hint: 'Déjalo vacío si solo quieres mantener el hábito.' }),
         field('Fecha límite', h('input', { type: 'date', name: 'deadline', value: draft.goal.deadline || '', onInput: (e) => { draft.goal.deadline = e.target.value || null; } }), { error: errors.deadline, hint: 'Con plazo, te diré si vas a tiempo y qué ritmo necesitas.' }),
       ),

@@ -1,7 +1,9 @@
 import { addDays, dateRange, diffDays, maxKey, weekStart, weekday } from './dates.js';
-import { isDone, isScheduled, targetDirection } from './habits.js';
+import { accumulated, isDone, isScheduled, targetDirection } from './habits.js';
 import { doneDaysByWeek, habitStart } from './streaks.js';
-import { accumulated } from './gamification.js';
+
+/** % de periodos cumplidos para dar por lograda una meta de duración. */
+export const DURATION_SUCCESS = 0.8;
 
 /**
  * % de cumplimiento en [from, to].
@@ -136,7 +138,7 @@ export function targetProjection(habit, log = {}, today) {
  */
 export function totalProjection(habit, log = {}, today) {
   const g = habit.goal;
-  if (!g.total) return null;
+  if (habit.kind !== 'count' || !g.total) return null;
   const done = accumulated(habit, log);
   const remaining = Math.max(0, g.total - done);
   const reached = remaining === 0;
@@ -198,4 +200,50 @@ export function weeklyTotals(habit, log = {}, weeks, today) {
     out.push({ week: w, value: sum });
   }
   return out;
+}
+
+/**
+ * Meta de duración (hábitos sí/no): periodos cumplidos entre goal.from y goal.deadline.
+ * Periodo = semana (hábitos N por semana; cumplida con N días distintos) o día programado.
+ * Un periodo pasado sin cumplir es "fallado"; el actual y los futuros son "restantes".
+ * La meta se logra al cumplir DURATION_SUCCESS (80%) de los periodos.
+ */
+export function durationProgress(habit, log = {}, today) {
+  const g = habit.goal;
+  if (habit.kind !== 'check' || !g.from || !g.deadline) return null;
+  const weekly = habit.schedule.type === 'weekly';
+  let met = 0;
+  let missed = 0;
+  let remaining = 0;
+
+  if (weekly) {
+    for (const [w, n] of doneDaysByWeek(habit, log, g.from, g.deadline)) {
+      if (n >= habit.schedule.times) met++;
+      else if (addDays(w, 6) < today) missed++;
+      else remaining++;
+    }
+  } else {
+    for (const k of dateRange(g.from, g.deadline)) {
+      if (!isScheduled(habit, k)) continue;
+      if (isDone(habit, log[k])) met++;
+      else if (k < today) missed++;
+      else remaining++;
+    }
+  }
+
+  const total = met + missed + remaining;
+  const required = Math.ceil(total * DURATION_SUCCESS);
+  return {
+    unit: weekly ? 'semana' : 'día',
+    from: g.from,
+    end: g.deadline,
+    total, met, missed, remaining, required,
+    needed: Math.max(0, required - met),
+    reached: total > 0 && met >= required,
+    failed: met + remaining < required,
+    ended: today > g.deadline,
+    started: today >= g.from,
+    progress: total ? met / total : 0,
+    daysLeft: diffDays(today, g.deadline),
+  };
 }

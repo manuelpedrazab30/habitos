@@ -1,4 +1,4 @@
-import { addDays, formatDate, relativeDay } from '../domain/dates.js';
+import { addDays, formatDate, relativeDay, weekStart, WEEKDAYS_SHORT } from '../domain/dates.js';
 import { isDone, isScheduled, TEMPLATES } from '../domain/habits.js';
 import { computeStreak, streakLabel } from '../domain/streaks.js';
 import { fmt, globalMessages } from '../domain/messages.js';
@@ -60,10 +60,6 @@ function habitCard(habit, state, day, ctx) {
   const streak = computeStreak(habit, log, ctx.today());
 
   const sub = [];
-  if (habit.schedule.type === 'weekly') {
-    const w = weekStatus(habit, log, day);
-    sub.push(`${w.done}/${w.times} esta semana`);
-  }
   if (streak.current > 0) sub.push(`🔥 ${streakLabel(streak.current, streak.unit)}`);
   if (habit.kind === 'target') {
     const ms = measurements(log);
@@ -124,7 +120,32 @@ function habitCard(habit, state, day, ctx) {
   }
 
   card.append(info, control);
+  if (habit.schedule.type === 'weekly') {
+    card.classList.add('has-strip');
+    card.append(weekStrip(habit, log, day, ctx));
+  }
   return card;
+}
+
+/**
+ * Semana del día mostrado, L→D. Cada registro es UN día: en "3 veces por semana" se
+ * marcan los días concretos en que lo hiciste. En hábitos sí/no cada día se puede tocar.
+ */
+function weekStrip(habit, log, day, ctx) {
+  const today = ctx.today();
+  const w = weekStart(day);
+  const status = weekStatus(habit, log, day);
+  return h('div', { class: 'week-strip', role: 'group', 'aria-label': 'Días de la semana' },
+    WEEKDAYS_SHORT.map((d, i) => {
+      const k = addDays(w, i);
+      const done = isDone(habit, log[k]);
+      const cls = `wd ${done ? 'on' : ''} ${k === day ? 'sel' : ''} ${k > today ? 'future' : ''}`;
+      const title = `${formatDate(k, { weekday: 'long', day: 'numeric', month: 'short' })}${done ? ' · hecho' : ''}`;
+      if (habit.kind !== 'check' || k > today) return h('span', { class: cls, title }, d);
+      return h('button', { class: cls, title, 'aria-pressed': String(done), 'aria-label': title, onClick: () => ctx.logEntry(habit, k, done ? null : 1) }, d);
+    }),
+    h('span', { class: `wk-count ${status.met ? 'met' : ''}` }, `${status.done}/${status.times} días${status.met ? ' ✓' : ''}`),
+  );
 }
 
 function emptyState(ctx) {

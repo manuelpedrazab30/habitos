@@ -1,6 +1,7 @@
 import { dateRange } from './dates.js';
-import { isDone, isScheduled, targetDirection } from './habits.js';
+import { accumulated, isDone, isScheduled, targetDirection } from './habits.js';
 import { doneDaysByWeek, habitStart } from './streaks.js';
+import { durationProgress } from './stats.js';
 
 // La XP se DERIVA siempre del historial (nunca se guarda): deshacer un registro o
 // rellenar días pasados deja la XP coherente sin migraciones ni contadores.
@@ -53,18 +54,9 @@ export function goalReached(habit, log = {}) {
     const dir = targetDirection(habit);
     return Object.values(log).some((v) => (dir < 0 ? v <= g.value : v >= g.value));
   }
+  if (habit.kind === 'check') return Boolean(durationProgress(habit, log, '9999-12-31')?.reached);
   if (!g.total) return false;
   return accumulated(habit, log) >= g.total;
-}
-
-/** Total acumulado para metas de total: cantidad sumada (count) o días cumplidos (check). */
-export function accumulated(habit, log = {}) {
-  let sum = 0;
-  for (const v of Object.values(log)) {
-    if (habit.kind === 'count') sum += Number(v) || 0;
-    else if (isDone(habit, v)) sum += 1;
-  }
-  return sum;
 }
 
 export function totalXp(state, today) {
