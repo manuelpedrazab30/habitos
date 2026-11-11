@@ -3,7 +3,7 @@ import { todayKey } from './domain/dates.js';
 import { levelInfo, totalXp } from './domain/gamification.js';
 import { computeStreak, streakLabel } from './domain/streaks.js';
 import { demoState } from './demo.js';
-import { bestWeights } from './domain/workouts.js';
+import { allExercises, bestWeights, normName } from './domain/workouts.js';
 import { fmt } from './domain/messages.js';
 import { h, hideTip, toast } from './ui/dom.js';
 import { todayView } from './ui/today.js';
@@ -40,8 +40,8 @@ const ctx = {
   },
 
   /** Guardar una sesión de entrenamiento (marca el día como hecho) con el mismo feedback. */
-  logWorkout(habit, key, items) {
-    withFeedback(habit, () => store.setWorkout(habit.id, key, items), { saved: 'Sesión guardada' });
+  logWorkout(habit, key, items, sessionId) {
+    withFeedback(habit, () => store.setWorkout(habit.id, key, items, sessionId), { saved: 'Sesión guardada' });
   },
 };
 
@@ -60,14 +60,17 @@ function withFeedback(habit, mutate, { saved = null } = {}) {
   const lvAfter = levelInfo(xpAfter).level;
   const undo = { action: 'Deshacer', onAction: () => store.undo() };
   // Récords de peso nuevos (no cuenta la primera vez que se registra un ejercicio)
-  const prs = (habit.routine || []).filter((ex) => ex.id in bestBefore && bestAfter[ex.id] > bestBefore[ex.id]);
+  const prs = allExercises(habit).filter((ex) => {
+    const k = normName(ex.name);
+    return k in bestBefore && bestAfter[k] > bestBefore[k];
+  });
 
   if (gained > 0) {
     celebrate(habit.id);
     if (lvAfter > levelInfo(xpBefore).level) {
       toast(`Nivel ${lvAfter} alcanzado`, { tone: 'level', timeout: 4500 });
     } else if (prs.length) {
-      toast(`Récord de peso: ${prs.map((ex) => `${ex.name} ${fmt(bestAfter[ex.id])} kg`).join(', ')} (+${gained} XP)`, { tone: 'good', timeout: 5000, ...undo });
+      toast(`Récord de peso: ${prs.map((ex) => `${ex.name} ${fmt(bestAfter[normName(ex.name)])} kg`).join(', ')} (+${gained} XP)`, { tone: 'good', timeout: 5000, ...undo });
     } else if (streakAfter.best > streakBefore.best && streakAfter.best > 1) {
       toast(`Nuevo récord en ${habit.name}: ${streakLabel(streakAfter.best, streakAfter.unit)} (+${gained} XP)`, { tone: 'good', ...undo });
     } else {

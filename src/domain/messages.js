@@ -2,7 +2,7 @@ import { addDays, diffDays, formatDate, WEEKDAYS } from './dates.js';
 import { isDone, isScheduled } from './habits.js';
 import { computeStreak, streakLabel } from './streaks.js';
 import { levelInfo, totalXp, XP } from './gamification.js';
-import { exerciseStats, setLabel, WEIGHT_STEP } from './workouts.js';
+import { allExercises, exerciseStats, hasRoutine, setLabel, WEIGHT_STEP } from './workouts.js';
 import { DURATION_SUCCESS, durationProgress, improvementAreas, targetProjection, totalProjection, weekdayRates, weekStatus } from './stats.js';
 
 // Mensajes de motivación basados en datos: cada uno dice una distancia concreta
@@ -88,10 +88,10 @@ export function durationMessage(habit, p) {
  * has progresado. Todo en kg concretos.
  */
 export function overloadMessages(habit, workouts = {}, today) {
-  if (!habit.routine?.length) return [];
+  if (!hasRoutine(habit)) return [];
   const out = [];
   const name = `${habit.emoji} ${habit.name}`;
-  const stats = habit.routine.map((ex) => exerciseStats(ex, workouts, today)).filter((st) => st.count);
+  const stats = allExercises(habit).map((ex) => exerciseStats(ex, workouts, today)).filter((st) => st.count);
 
   const ready = stats.filter((st) => st.suggestion !== null);
   if (ready.length) {

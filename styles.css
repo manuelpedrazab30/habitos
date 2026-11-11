@@ -174,7 +174,7 @@ input, select {
   color: var(--text); background: var(--surface);
   border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; width: 100%;
 }
-.habit-form fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px 14px; margin: 0; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
+.habit-form fieldset { min-width: 0; /* por defecto min-content: las pestañas largas lo ensancharían */ border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px 14px; margin: 0; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
 .habit-form legend { font-weight: 700; padding: 0 6px; }
 .form-head { display: flex; flex-direction: column; gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
@@ -235,6 +235,11 @@ input, select {
 .goal-row strong { color: var(--text); font-size: 1.2rem; }
 .goal-card .bar > span { background: var(--c); }
 /* Rutina y sesiones de entrenamiento */
+.session-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.session-tab { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 0.88rem; }
+.session-tab small { font-weight: 600; font-size: 0.72rem; background: var(--surface-2); border-radius: 99px; padding: 0 6px; color: var(--muted); }
+.session-tab.on { background: var(--accent); border-color: var(--accent); color: white; }
+.session-tab.on small { background: rgba(255, 255, 255, 0.25); color: white; }
 .routine-head, .routine-row { display: grid; grid-template-columns: minmax(0, 1fr) 58px 58px 76px 36px; gap: 6px; align-items: center; }
 .routine-row input { padding: 8px; }
 .routine-row .cell { display: block; min-width: 0; }

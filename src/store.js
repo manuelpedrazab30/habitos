@@ -1,19 +1,19 @@
 import { createHabit } from './domain/habits.js';
-import { normalizeSession } from './domain/workouts.js';
+import { normalizeWorkoutEntry } from './domain/workouts.js';
 
 // Estado único de la app, persistido en localStorage. Todo lo derivado (rachas, XP,
 // niveles, estadísticas) se calcula al vuelo desde aquí y NO se guarda.
 //
 // state = {
-//   version: 3,
+//   version: 4,
 //   habits: Habit[],                                  // ver domain/habits.js
 //   entries: { [habitId]: { 'YYYY-MM-DD': number } }, // un valor por hábito y día
-//   workouts: { [habitId]: { 'YYYY-MM-DD': Set[] } }, // detalle de sesiones (domain/workouts.js)
+//   workouts: { [habitId]: { 'YYYY-MM-DD': { sessionId, items } } }, // sesiones de entreno (domain/workouts.js)
 //   settings: {}
 // }
 
 export const STORAGE_KEY = 'habitos.state';
-export const VERSION = 3;
+export const VERSION = 4;
 
 const empty = () => ({ version: VERSION, habits: [], entries: {}, workouts: {}, settings: {} });
 
@@ -26,7 +26,12 @@ export function migrate(raw) {
   s.habits = (s.habits || []).map((h) => createHabit(h));
   // v2 → v3: rutinas (habit.routine) y sesiones de entrenamiento (state.workouts)
   s.entries = s.entries && typeof s.entries === 'object' ? s.entries : {};
+  // v3 → v4: la rutina se divide en sesiones por día (habit.sessions; createHabit migra
+  // `routine`) y cada día de entreno guarda { sessionId, items } en vez de un array.
   s.workouts = s.workouts && typeof s.workouts === 'object' ? s.workouts : {};
+  s.workouts = Object.fromEntries(Object.entries(s.workouts).map(([hid, days]) => [
+    hid, Object.fromEntries(Object.entries(days || {}).map(([k, e]) => [k, normalizeWorkoutEntry(e)])),
+  ]));
   s.version = VERSION;
   return s;
 }
@@ -104,12 +109,12 @@ export function createStore(storage = globalThis.localStorage) {
       commit({ ...state, entries: { ...state.entries, [habitId]: log }, workouts }, () => commit(before));
     },
 
-    /** Guarda la sesión de un día y marca el día como hecho. items vacío = solo marcar. */
-    setWorkout(habitId, key, items) {
+    /** Guarda la sesión de un día (de la plantilla sessionId) y marca el día. items vacío = solo marcar. */
+    setWorkout(habitId, key, items, sessionId = null) {
       const before = state;
       const w = { ...(state.workouts[habitId] || {}) };
-      const session = normalizeSession(items);
-      if (session.length) w[key] = session;
+      const entry = normalizeWorkoutEntry({ sessionId, items });
+      if (entry.items.length || entry.sessionId) w[key] = entry; // sin ejercicios, la sesión elegida sigue contando para la rotación
       else delete w[key];
       commit({
         ...state,

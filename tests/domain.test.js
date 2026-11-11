@@ -5,7 +5,7 @@ import { computeStreak } from '../src/domain/streaks.js';
 import { habitXp, levelInfo, goalReached } from '../src/domain/gamification.js';
 import { completionRate, durationProgress, linearTrend, targetProjection, totalProjection, weekStatus, weekdayRates } from '../src/domain/stats.js';
 import { durationMessage, habitMessages, overloadMessages, targetMessage } from '../src/domain/messages.js';
-import { bestWeights, exerciseStats, normalizeRoutine, prCount, prefillSession, setLabel } from '../src/domain/workouts.js';
+import { allExercises, bestWeights, exerciseStats, normalizeRoutine, normalizeWorkoutEntry, prCount, prefillSession, sessionCount, sessionFor, setLabel } from '../src/domain/workouts.js';
 
 const T = '2026-11-11'; // miércoles
 const logOf = (keys, v = 1) => Object.fromEntries(keys.map((k) => [k, v]));
@@ -187,18 +187,45 @@ test('duration: lograda al 80% suma bonus de meta', () => {
   ok(habitXp(h, log, T) >= 250);
 });
 
-// ── Rutinas y sobrecarga progresiva
+// ── Rutinas por sesiones y sobrecarga progresiva
 const routine = [{ id: 'sq', name: 'Sentadilla', sets: 3, reps: 8 }, { id: 'bp', name: 'Press banca', sets: 3, reps: 8 }];
-const sess = (sq, bp, repsBp = 8) => [
+const sess = (sq, bp, repsBp = 8, sessionId = null) => ({ sessionId, items: [
   { exerciseId: 'sq', name: 'Sentadilla', sets: 3, reps: 8, weight: sq },
   { exerciseId: 'bp', name: 'Press banca', sets: 3, reps: repsBp, weight: bp },
-];
-test('workouts: rutina solo en hábitos sí/no y normalizada', () => {
-  const h = createHabit({ name: 'Entrenar', kind: 'check', routine: [{ name: ' Sentadilla ', sets: '3', reps: '8', weight: '' }, { name: '' }] });
-  eq(h.routine.length, 1);
-  eq([h.routine[0].name, h.routine[0].sets, h.routine[0].weight], ['Sentadilla', 3, null]);
-  eq(createHabit({ name: 'Leer', kind: 'count', routine: [{ name: 'x' }] }).routine, []);
+] });
+test('sessions: una plantilla por entrenamiento de la semana', () => {
+  eq(sessionCount({ type: 'weekly', times: 3 }), 3);
+  eq(sessionCount({ type: 'days', days: [0, 2, 4, 5] }), 4);
+  eq(sessionCount({ type: 'daily' }), 7);
+  const h = createHabit({ name: 'Entrenar', kind: 'check', schedule: { type: 'weekly', times: 3 }, sessions: [{ exercises: [{ name: 'Sentadilla', sets: '3', reps: '8' }, { name: '' }] }] });
+  eq(h.sessions.map((x) => x.name), ['Día A', 'Día B', 'Día C']);
+  eq([h.sessions[0].exercises.length, h.sessions[1].exercises.length], [1, 0]);
+  const days = createHabit({ name: 'E', kind: 'check', schedule: { type: 'days', days: [0, 3] }, sessions: [{ name: 'Torso', exercises: [{ name: 'Press' }] }] });
+  eq(days.sessions.map((x) => x.name), ['Torso', 'Jueves']);
+  eq(createHabit({ name: 'E', kind: 'check', sessions: [{ exercises: [] }] }).sessions, [], 'sin ejercicios = sin rutina');
+  eq(createHabit({ name: 'Leer', kind: 'count', sessions: [{ exercises: [{ name: 'x' }] }] }).sessions, []);
   eq(normalizeRoutine(null), []);
+});
+test('sessions: menos veces por semana recorta las últimas plantillas', () => {
+  const h = createHabit({ name: 'E', kind: 'check', schedule: { type: 'weekly', times: 2 }, sessions: [{ name: 'A', exercises: [{ name: 'x' }] }, { name: 'B', exercises: [{ name: 'y' }] }, { name: 'C', exercises: [{ name: 'z' }] }] });
+  eq(h.sessions.map((x) => x.name), ['A', 'B']);
+});
+test('sessions: la rutina única de v3 se copia a cada sesión conservando ids en la primera', () => {
+  const h = createHabit({ name: 'E', kind: 'check', schedule: { type: 'weekly', times: 2 }, routine: [{ id: 'sq', name: 'Sentadilla', reps: 8 }] });
+  eq(h.sessions.length, 2);
+  eq(h.sessions[0].exercises[0].id, 'sq');
+  ok(h.sessions[1].exercises[0].id !== 'sq');
+  eq(allExercises(h).length, 1, 'mismo ejercicio en dos sesiones cuenta una vez');
+  eq(normalizeWorkoutEntry([{ exerciseId: 'sq', name: 'Sentadilla', weight: 60 }]).sessionId, null);
+});
+test('sessions: qué plantilla toca cada día', () => {
+  const weekly = createHabit({ name: 'E', kind: 'check', schedule: { type: 'weekly', times: 3 }, sessions: [{ id: 'a', exercises: [{ name: 'x' }] }, { id: 'b', exercises: [{ name: 'y' }] }, { id: 'c', exercises: [{ name: 'z' }] }] });
+  eq(sessionFor(weekly, {}, T).id, 'a', 'sin historial, la primera');
+  eq(sessionFor(weekly, { '2026-11-09': { sessionId: 'a', items: [] } }, T).id, 'b', 'rota a la siguiente');
+  eq(sessionFor(weekly, { '2026-11-10': { sessionId: 'c', items: [] } }, T).id, 'a', 'después de la última vuelve a la primera');
+  eq(sessionFor(weekly, { [T]: { sessionId: 'c', items: [] } }, T).id, 'c', 'si ya se registró, la registrada');
+  const days = createHabit({ name: 'E', kind: 'check', schedule: { type: 'days', days: [0, 2, 4] }, sessions: [{ id: 'l', exercises: [{ name: 'x' }] }, { id: 'x', exercises: [{ name: 'y' }] }, { id: 'v', exercises: [{ name: 'z' }] }] });
+  eq(sessionFor(days, {}, T).id, 'x', 'miércoles → segunda plantilla');
 });
 test('workouts: estadísticas de peso, estancamiento y sugerencia', () => {
   const w = {
@@ -211,9 +238,16 @@ test('workouts: estadísticas de peso, estancamiento y sugerencia', () => {
   const bp = exerciseStats(routine[1], w, T);
   eq([bp.atWeight, bp.stalled, bp.suggestion], [5, true, null]);
   eq(prCount(w), 4);
-  eq(bestWeights(w), { sq: 70, bp: 50 });
+  eq(bestWeights(w), { sentadilla: 70, 'press banca': 50 });
 });
-test('workouts: la hoja se precarga con la última sesión o el plan', () => {
+test('workouts: un ejercicio en dos sesiones comparte historial (por nombre)', () => {
+  const w = { '2026-11-02': { sessionId: 'a', items: [{ exerciseId: 'sq-a', name: 'Sentadilla', reps: 8, weight: 80 }] },
+    '2026-11-05': { sessionId: 'c', items: [{ exerciseId: 'sq-c', name: 'sentadilla ', reps: 5, weight: 90 }] } };
+  const st = exerciseStats({ id: 'sq-a', name: 'Sentadilla', reps: 8 }, w, T);
+  eq([st.count, st.last.weight, st.best], [2, 90, 90]);
+  eq(prCount(w), 1);
+});
+test('workouts: la hoja se precarga con la última vez o el plan', () => {
   const w = { '2026-11-09': sess(80, 55) };
   const rows = prefillSession(routine, w, T);
   eq([rows[0].weight, rows[0].reps, rows[0].done], [80, 8, true]);
@@ -224,8 +258,7 @@ test('workouts: la hoja se precarga con la última sesión o el plan', () => {
   eq(setLabel({ sets: 3, reps: 12, weight: null }), '3×12 @ peso corporal');
 });
 test('workouts: mensajes de sobrecarga concretos', () => {
-  const h = createHabit({ name: 'Entrenar', emoji: '🏋️', kind: 'check', routine });
-  h.routine[0].id = 'sq'; h.routine[1].id = 'bp';
+  const h = createHabit({ name: 'Entrenar', emoji: '🏋️', kind: 'check', schedule: { type: 'weekly', times: 1 }, sessions: [{ exercises: routine }] });
   const w = { '2026-10-20': sess(60, 50, 6), '2026-10-27': sess(60, 50, 6), '2026-11-03': sess(60, 50, 6), '2026-11-10': sess(60, 50, 6) };
   const msgs = overloadMessages(h, w, T);
   ok(msgs.some((m) => m.text.includes('Sentadilla: completaste 3×8 @ 60 kg. Prueba 62,5 kg')), JSON.stringify(msgs));

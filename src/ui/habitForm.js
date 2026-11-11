@@ -1,6 +1,7 @@
 import { COLORS, createHabit, durationWeeks, KINDS, TEMPLATES, validateHabit } from '../domain/habits.js';
 import { addDays, formatDate, WEEKDAYS_SHORT } from '../domain/dates.js';
 import { DURATION_SUCCESS } from '../domain/stats.js';
+import { defaultSessionName, isDefaultSessionName, sessionCount } from '../domain/workouts.js';
 import { h, toast } from './dom.js';
 
 const EMOJIS = ['✨', '🧘', '📚', '🏋️', '💧', '⚖️', '🏃', '🥗', '😴', '✍️', '🎸', '💻', '🚭', '🧠', '🚴', '💰'];
@@ -36,19 +37,53 @@ export function habitFormView(state, ctx, id, params) {
 
   let errors = {};
 
-  // Rutina (sí/no): ejercicio · series · reps · peso. Editar no repinta (conserva el foco).
-  function routineFieldset() {
-    if (!Array.isArray(draft.routine)) draft.routine = [];
-    const rows = draft.routine;
-    // Cada campo va en un <label> con texto visible solo en el móvil (allí no hay fila de cabecera)
+  // Rutina (sí/no) dividida en sesiones: una plantilla por entrenamiento de la semana.
+  // Editar campos no repinta (conserva el foco); añadir/quitar sí.
+  let activeSession = 0;
+  const newId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()));
+
+  /** Ajusta el nº de plantillas a las veces por semana sin tocar los ejercicios (las filas vacías se conservan mientras editas). */
+  function fitSessions() {
+    if (draft.kind !== 'check' || !draft.sessions?.length) return;
+    const n = sessionCount(draft.schedule);
+    while (draft.sessions.length < n) draft.sessions.push({ id: newId(), name: '', exercises: [] });
+    draft.sessions.length = n;
+    draft.sessions.forEach((x, i) => { if (isDefaultSessionName(x.name)) x.name = defaultSessionName(draft.schedule, i); });
+    if (activeSession >= n) activeSession = 0;
+  }
+
+  function sessionsFieldset() {
+    if (!draft.sessions?.length) {
+      return h('fieldset', {}, h('legend', {}, 'Rutina de ejercicios (opcional)'),
+        h('p', { class: 'muted' }, `Crea una plantilla por día de entrenamiento (${sessionCount(draft.schedule)} con tu calendario actual). Al marcar una sesión anotarás series, reps y peso, y se seguirá tu progresión de peso.`),
+        h('button', { type: 'button', class: 'btn ghost', onClick: () => {
+          draft.sessions = [{ id: newId(), name: '', exercises: [{ id: newId(), name: '', sets: 3, reps: 8, weight: null }] }];
+          fitSessions();
+          paint();
+          form.querySelector('[name="ex-0-0-name"]')?.focus();
+        } }, '+ Crear rutina por sesiones'),
+      );
+    }
+    const idx = activeSession;
+    const session = draft.sessions[idx];
+    const rows = session.exercises;
     const cell = (i, key, attrs) => h('label', { class: `cell cell-${key}` },
       h('span', { class: 'cell-label' }, attrs['aria-label']),
       h('input', {
-        name: `ex-${i}-${key}`, value: rows[i][key] ?? '', ...attrs,
+        name: `ex-${idx}-${i}-${key}`, value: rows[i][key] ?? '', ...attrs,
         onInput: (e) => { rows[i][key] = key === 'name' ? e.target.value : (e.target.value === '' ? null : Number(e.target.value)); },
       }));
-    return h('fieldset', {}, h('legend', {}, 'Rutina de ejercicios (opcional)'),
-      h('p', { class: 'muted' }, 'Al marcar una sesión podrás anotar series, reps y peso de cada ejercicio. Se sigue tu progresión de peso para aplicar sobrecarga progresiva.'),
+    const others = draft.sessions.filter((x, i) => i !== idx && x.exercises.some((e) => e.name.trim()));
+
+    return h('fieldset', {}, h('legend', {}, `Rutina: ${draft.sessions.length} ${draft.sessions.length === 1 ? 'sesión' : 'sesiones'}`),
+      h('p', { class: 'muted small' }, draft.schedule.type === 'weekly'
+        ? `Una plantilla por entrenamiento de la semana. Se alternan en orden (${draft.sessions.map((x) => x.name.split(' · ')[0]).join(' → ')} → …).`
+        : 'Una plantilla por cada día de entrenamiento.'),
+      h('div', { class: 'session-tabs', role: 'tablist' }, draft.sessions.map((x, i) => h('button', {
+        type: 'button', role: 'tab', 'aria-selected': String(i === idx), class: `session-tab ${i === idx ? 'on' : ''}`,
+        onClick: () => { activeSession = i; paint(); },
+      }, x.name || defaultSessionName(draft.schedule, i), h('small', {}, `${x.exercises.filter((e) => e.name.trim()).length}`)))),
+      field('Nombre de la sesión', h('input', { name: `s-${idx}-name`, value: session.name, placeholder: defaultSessionName(draft.schedule, idx), onInput: (e) => { session.name = e.target.value; } }), { hint: 'Ej.: Día A · Empuje, Pierna, Torso…' }),
       rows.length ? h('div', { class: 'routine-head muted small' }, h('span', {}, 'Ejercicio'), h('span', {}, 'Series'), h('span', {}, 'Reps'), h('span', {}, 'Peso (kg)'), h('span', {})) : null,
       rows.map((ex, i) => h('div', { class: 'routine-row' },
         cell(i, 'name', { placeholder: 'Ej.: Sentadilla', 'aria-label': 'Ejercicio' }),
@@ -57,12 +92,18 @@ export function habitFormView(state, ctx, id, params) {
         cell(i, 'weight', { type: 'number', inputmode: 'decimal', step: 'any', min: 0, placeholder: '—', 'aria-label': 'Peso (kg)' }),
         h('button', { type: 'button', class: 'icon-btn small', 'aria-label': `Quitar ${ex.name || 'ejercicio'}`, onClick: () => { rows.splice(i, 1); paint(); } }, '✕'),
       )),
-      h('button', { type: 'button', class: 'btn ghost', onClick: () => {
-        rows.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name: '', sets: rows.at(-1)?.sets ?? 3, reps: rows.at(-1)?.reps ?? 8, weight: null });
-        paint();
-        form.querySelector(`[name="ex-${rows.length - 1}-name"]`)?.focus();
-      } }, '+ Añadir ejercicio'),
-      rows.length ? h('small', { class: 'muted' }, 'Reps = objetivo por serie. Cuando lo completes con un peso, te diré que subas 2,5 kg. Peso vacío = peso corporal.') : null,
+      !rows.length && others.length ? h('div', { class: 'chips' }, h('span', { class: 'muted small' }, 'Copiar de:'), others.map((o) => h('button', {
+        type: 'button', class: 'chip', onClick: () => { session.exercises = o.exercises.filter((e) => e.name.trim()).map((e) => ({ ...e, id: newId() })); paint(); },
+      }, o.name))) : null,
+      h('div', { class: 'actions' },
+        h('button', { type: 'button', class: 'btn ghost', onClick: () => {
+          rows.push({ id: newId(), name: '', sets: rows.at(-1)?.sets ?? 3, reps: rows.at(-1)?.reps ?? 8, weight: null });
+          paint();
+          form.querySelector(`[name="ex-${idx}-${rows.length - 1}-name"]`)?.focus();
+        } }, '+ Añadir ejercicio'),
+        h('button', { type: 'button', class: 'btn ghost small', onClick: () => { if (confirm('¿Quitar la rutina completa?')) { draft.sessions = []; paint(); } } }, 'Quitar rutina'),
+      ),
+      h('small', { class: 'muted' }, 'Reps = objetivo por serie: al completarlo con un peso te diré que subas 2,5 kg. Un ejercicio repetido en varias sesiones comparte su progresión. Si reduces las veces por semana se quitan las últimas sesiones.'),
     );
   }
 
@@ -104,6 +145,7 @@ export function habitFormView(state, ctx, id, params) {
   }
 
   function paint() {
+    fitSessions();
     const focusedName = document.activeElement?.name;
     form.replaceChildren(...[ // replaceChildren no ignora null como h()
       h('header', { class: 'form-head' },
@@ -159,7 +201,7 @@ export function habitFormView(state, ctx, id, params) {
         ) : null,
       ),
 
-      draft.kind === 'check' ? routineFieldset() : null,
+      draft.kind === 'check' ? sessionsFieldset() : null,
 
       draft.kind === 'check' ? durationFieldset() : h('fieldset', {}, h('legend', {}, draft.kind === 'target' ? 'Objetivo' : 'Meta con plazo (opcional)'),
         draft.kind === 'target'

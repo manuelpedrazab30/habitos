@@ -1,5 +1,5 @@
 import { addDays, diffDays, weekday, todayKey } from './dates.js';
-import { normalizeRoutine } from './workouts.js';
+import { normalizeSessions, sessionsFromLegacyRoutine } from './workouts.js';
 
 /**
  * Tres tipos de hábito cubren casi todo:
@@ -19,8 +19,8 @@ import { normalizeRoutine } from './workouts.js';
  *  - count:  { total, deadline } → "1000 páginas" antes de una fecha
  *  - target: { start, value, deadline } → de 85 kg a 78 kg antes de una fecha
  *
- * Rutina (routine), opcional y solo en check: ejercicios con series, reps y peso planificados.
- * Las sesiones se guardan aparte en state.workouts (ver workouts.js).
+ * Rutina (sessions), opcional y solo en check: una plantilla de ejercicios por día de
+ * entrenamiento de la semana (3 veces/semana → Día A, B, C). Ver workouts.js.
  *
  * En todos los tipos, un registro = un día. En un hábito "3 veces por semana", cada
  * registro es un día de esa semana; la semana se cumple al llegar a 3 días distintos.
@@ -38,7 +38,11 @@ export const TEMPLATES = [
   { name: 'Leer', emoji: '📚', kind: 'count', unit: 'páginas', dailyGoal: 20, step: 5, schedule: { type: 'daily' } },
   {
     name: 'Entrenar', emoji: '🏋️', kind: 'check', schedule: { type: 'weekly', times: 3 }, goal: { weeks: 12 },
-    routine: [{ name: 'Sentadilla', sets: 3, reps: 8 }, { name: 'Press banca', sets: 3, reps: 8 }, { name: 'Remo con barra', sets: 3, reps: 10 }],
+    sessions: [
+      { name: 'Día A · Empuje', exercises: [{ name: 'Press banca', sets: 3, reps: 8 }, { name: 'Press militar', sets: 3, reps: 8 }, { name: 'Fondos', sets: 3, reps: 10 }] },
+      { name: 'Día B · Tirón', exercises: [{ name: 'Remo con barra', sets: 3, reps: 10 }, { name: 'Dominadas', sets: 3, reps: 8 }, { name: 'Curl de bíceps', sets: 3, reps: 12 }] },
+      { name: 'Día C · Pierna', exercises: [{ name: 'Sentadilla', sets: 3, reps: 8 }, { name: 'Peso muerto rumano', sets: 3, reps: 10 }, { name: 'Zancadas', sets: 3, reps: 12 }] },
+    ],
   },
   { name: 'Agua', emoji: '💧', kind: 'count', unit: 'vasos', dailyGoal: 8, step: 1, schedule: { type: 'daily' } },
   { name: 'Peso', emoji: '⚖️', kind: 'target', unit: 'kg', schedule: { type: 'weekly', times: 1 }, goal: {} },
@@ -59,12 +63,17 @@ export function createHabit(input, now = new Date()) {
     dailyGoal: kind === 'count' ? Number(input.dailyGoal) || 1 : null,
     step: kind === 'count' ? Number(input.step) || 1 : null,
     schedule: normalizeSchedule(input.schedule),
-    routine: kind === 'check' ? normalizeRoutine(input.routine) : [],
+    sessions: [],
     goal: null,
     createdAt: input.createdAt || todayKey(now),
     archived: Boolean(input.archived),
   };
   habit.goal = normalizeGoal(kind, input.goal, habit.createdAt);
+  if (kind === 'check') {
+    // `routine` (lista única, v3) se migra a sesiones
+    const raw = input.sessions ?? sessionsFromLegacyRoutine(input.routine, habit.schedule);
+    habit.sessions = normalizeSessions(raw, habit.schedule);
+  }
   return habit;
 }
 

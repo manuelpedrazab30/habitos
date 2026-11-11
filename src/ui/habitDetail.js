@@ -6,7 +6,7 @@ import { completionRate, durationProgress, targetProjection, totalProjection, we
 import { durationMessage, fmt, habitMessages, pct, targetMessage, totalMessage } from '../domain/messages.js';
 import { h } from './dom.js';
 import { barChart, heatmap, lineChart } from './charts.js';
-import { exerciseStats, setLabel } from '../domain/workouts.js';
+import { allExercises, entryItems, exerciseStats, hasRoutine, setLabel } from '../domain/workouts.js';
 import { openWorkoutSheet } from './workoutSheet.js';
 
 const LINE_RANGES = [['1m', '1 mes', 30], ['3m', '3 meses', 91], ['all', 'Todo', null]];
@@ -42,7 +42,7 @@ export function habitDetailView(state, ctx, id) {
 
     goalCard(habit, log, today),
     extras.length ? h('ul', { class: 'messages' }, extras.map((m) => h('li', { class: `msg ${m.kind}` }, m.text))) : null,
-    habit.routine?.length ? liftsCard(habit, workouts, today, ctx) : null,
+    hasRoutine(habit) ? liftsCard(habit, workouts, today, ctx) : null,
     habit.kind === 'target' ? targetChart(habit, log, today, ctx) : null,
     habit.kind === 'count' ? weeklyChart(habit, log, today) : null,
     habit.kind === 'check' && habit.schedule.type === 'weekly' ? weeklyDaysChart(habit, log, today) : null,
@@ -147,7 +147,7 @@ function weeklyChart(habit, log, today) {
  * estado) + gráfica del peso por sesión del ejercicio elegido + últimas sesiones.
  */
 function liftsCard(habit, workouts, today, ctx) {
-  const stats = habit.routine.map((ex) => exerciseStats(ex, workouts, today));
+  const stats = allExercises(habit).map((ex) => exerciseStats(ex, workouts, today));
   const withData = stats.filter((st) => st.count);
   const register = h('button', { class: 'btn primary small', onClick: () => openWorkoutSheet(habit, today, ctx) }, '+ Sesión de hoy');
   if (!withData.length) {
@@ -192,7 +192,9 @@ function liftsCard(habit, workouts, today, ctx) {
     h('h3', { class: 'lift-title' }, 'Últimas sesiones'),
     h('ul', { class: 'sessions' }, recentSessions.map((k) => h('li', {},
       h('span', { class: 'when' }, formatDate(k)),
-      h('span', { class: 'what' }, workouts[k].map((i) => `${i.name || habit.routine.find((e) => e.id === i.exerciseId)?.name || '?'} ${setLabel(i, fmt)}`).join(' · ')),
+      h('span', { class: 'what' },
+        h('b', {}, habit.sessions.find((x) => x.id === workouts[k].sessionId)?.name || 'Sesión'), h('br'),
+        entryItems(workouts[k]).map((i) => `${i.name || '?'} ${setLabel(i, fmt)}`).join(' · ') || 'Sin ejercicios anotados'),
       h('button', { class: 'btn ghost small', onClick: () => openWorkoutSheet(habit, k, ctx) }, 'Editar'),
     ))),
   );
@@ -225,7 +227,7 @@ function historyCard(habit, log, today, ctx) {
     const v = log[key];
     const label = formatDate(key, { weekday: 'long', day: 'numeric', month: 'long' });
     let control;
-    if (habit.routine?.length) {
+    if (hasRoutine(habit)) {
       control = h('button', { class: 'btn primary', onClick: () => openWorkoutSheet(habit, key, ctx) }, isDone(habit, v) ? 'Ver / editar sesión' : 'Registrar sesión');
     } else if (habit.kind === 'check') {
       const done = isDone(habit, v);

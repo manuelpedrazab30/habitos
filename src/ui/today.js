@@ -7,6 +7,7 @@ import { h } from './dom.js';
 import { ring } from './charts.js';
 import { installHint } from './install.js';
 import { openWorkoutSheet } from './workoutSheet.js';
+import { hasRoutine, sessionFor } from '../domain/workouts.js';
 
 // Vista "Hoy": registrar es un toque. Todo lo demás (estadísticas, edición) está a un nivel más.
 
@@ -65,7 +66,10 @@ function habitCard(habit, state, day, ctx) {
 
   const sub = [];
   if (streak.current > 0) sub.push(`🔥 ${streakLabel(streak.current, streak.unit)}`);
-  if (habit.routine?.length) sub.push(`${habit.routine.length} ejercicios`);
+  if (hasRoutine(habit) && (isScheduled(habit, day) || done)) {
+    const sess = sessionFor(habit, state.workouts?.[habit.id], day);
+    sub.push(`${done ? '' : day === ctx.today() ? 'Hoy: ' : 'Toca: '}${sess.name}`);
+  }
   if (habit.kind === 'target') {
     const ms = measurements(log);
     const last = ms[ms.length - 1];
@@ -92,7 +96,7 @@ function habitCard(habit, state, day, ctx) {
     control = h('button', {
       class: 'check-btn', 'aria-pressed': String(done), 'aria-label': done ? 'Marcar como no hecho' : 'Marcar como hecho',
       // Con rutina, marcar abre la hoja de sesión (precargada con la última vez)
-      onClick: () => (habit.routine?.length ? openWorkoutSheet(habit, day, ctx) : ctx.logEntry(habit, day, done ? null : 1)),
+      onClick: () => (hasRoutine(habit) ? openWorkoutSheet(habit, day, ctx) : ctx.logEntry(habit, day, done ? null : 1)),
     }, done ? '✓' : '');
   } else if (habit.kind === 'count') {
     const v = Number(value) || 0;
@@ -164,7 +168,7 @@ function weekStrip(habit, log, day, ctx) {
       const cls = `wd ${done ? 'on' : ''} ${k === day ? 'sel' : ''} ${k > today ? 'future' : ''}`;
       const title = `${formatDate(k, { weekday: 'long', day: 'numeric', month: 'short' })}${done ? ' · hecho' : ''}`;
       if (habit.kind !== 'check' || k > today) return h('span', { class: cls, title }, d);
-      return h('button', { class: cls, title, 'aria-pressed': String(done), 'aria-label': title, onClick: () => (habit.routine?.length ? openWorkoutSheet(habit, k, ctx) : ctx.logEntry(habit, k, done ? null : 1)) }, d);
+      return h('button', { class: cls, title, 'aria-pressed': String(done), 'aria-label': title, onClick: () => (hasRoutine(habit) ? openWorkoutSheet(habit, k, ctx) : ctx.logEntry(habit, k, done ? null : 1)) }, d);
     }),
     h('span', { class: `wk-count ${status.met ? 'met' : ''}` }, `${status.done}/${status.times} días${status.met ? ' ✓' : ''}`),
   );

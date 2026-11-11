@@ -1,29 +1,33 @@
 import { formatDate, relativeDay } from '../domain/dates.js';
 import { isDone } from '../domain/habits.js';
 import { fmt } from '../domain/messages.js';
-import { exerciseHistory, exerciseStats, prefillSession, setLabel, WEIGHT_STEP } from '../domain/workouts.js';
+import { exerciseHistory, exerciseStats, prefillSession, sessionFor, setLabel, WEIGHT_STEP } from '../domain/workouts.js';
 import { h } from './dom.js';
 import { openSheet } from './sheet.js';
 
 /**
  * Registrar (o editar) la sesión de un día para un hábito con rutina.
- * Precargada con la última vez de cada ejercicio: si repites lo mismo, es un toque en "Guardar".
+ * Abre la plantilla que toca ese día (sessionFor) y se puede cambiar con las pestañas.
+ * Cada ejercicio se precarga con la última vez que lo hiciste: repetir es un toque en "Guardar".
  */
 export function openWorkoutSheet(habit, key, ctx) {
   const state = ctx.store.get();
-  const sessions = state.workouts[habit.id] || {};
-  const before = Object.fromEntries(Object.entries(sessions).filter(([k]) => k < key)); // solo lo anterior a ese día
+  const workouts = state.workouts[habit.id] || {};
+  const before = Object.fromEntries(Object.entries(workouts).filter(([k]) => k < key)); // solo lo anterior a ese día
   const alreadyDone = isDone(habit, state.entries[habit.id]?.[key]);
-  const rows = prefillSession(habit.routine, sessions, key);
   const today = ctx.today();
+  const suggested = sessionFor(habit, workouts, key);
+  let session = suggested;
+  let rows = [];
 
   openSheet((close) => {
+    const tabs = h('div', { class: 'session-tabs', role: 'tablist' });
+    const hint = h('p', { class: 'muted small' });
     const body = h('div', { class: 'ex-list', style: { '--c': habit.color } });
 
-    function exCard(row, i) {
-      const ex = habit.routine[i];
+    function exCard(row, ex) {
       const st = exerciseStats(ex, before, key);
-      const last = exerciseHistory(before, ex.id).pop();
+      const last = exerciseHistory(before, ex).pop();
       const card = h('div', { class: `ex-card ${row.done ? '' : 'skipped'}` });
 
       const weightInput = h('input', {
@@ -34,9 +38,9 @@ export function openWorkoutSheet(habit, key, ctx) {
         row.weight = Math.max(0, Math.round(((row.weight ?? 0) + d) * 100) / 100);
         weightInput.value = row.weight;
       };
-      const numField = (label, key2) => h('label', {}, label, h('input', {
-        type: 'number', inputmode: 'numeric', min: 1, value: row[key2] ?? '', 'aria-label': `${label} de ${ex.name}`,
-        onInput: (e) => { row[key2] = e.target.value === '' ? null : Number(e.target.value); },
+      const numField = (label, prop) => h('label', {}, label, h('input', {
+        type: 'number', inputmode: 'numeric', min: 1, value: row[prop] ?? '', 'aria-label': `${label} de ${ex.name}`,
+        onInput: (e) => { row[prop] = e.target.value === '' ? null : Number(e.target.value); },
       }));
 
       card.append(...[ // append() no ignora null como h()
@@ -48,7 +52,7 @@ export function openWorkoutSheet(habit, key, ctx) {
         ),
         h('div', { class: 'ex-last' },
           last ? `Última (${relativeDay(last.key, today)}): ${setLabel(last, fmt)}` : 'Primera vez',
-          st.count && st.best !== undefined ? ` · récord ${fmt(st.best)} kg` : '',
+          st.count ? ` · récord ${fmt(st.best)} kg` : '',
           ex.reps ? ` · objetivo ${ex.reps} reps` : '',
         ),
         h('div', { class: 'ex-fields' },
@@ -68,7 +72,21 @@ export function openWorkoutSheet(habit, key, ctx) {
       return card;
     }
 
-    body.append(...rows.map(exCard));
+    function show(s) {
+      session = s;
+      rows = prefillSession(s.exercises, workouts, key, s.id);
+      tabs.replaceChildren(...habit.sessions.map((x) => h('button', {
+        type: 'button', role: 'tab', 'aria-selected': String(x === s), class: `session-tab ${x === s ? 'on' : ''}`,
+        onClick: () => show(x),
+      }, x.name, x === suggested ? h('small', {}, key === today ? 'hoy' : 'toca') : null)));
+      hint.textContent = s === suggested
+        ? (key === today ? 'Te toca esta sesión. Ajusta lo que cambió respecto a la última vez y guarda.' : `Editando el ${formatDate(key, { weekday: 'long', day: 'numeric', month: 'long' })}.`)
+        : `Has cambiado de sesión; la que tocaba era ${suggested.name}.`;
+      body.replaceChildren(...(s.exercises.length
+        ? rows.map((r, i) => exCard(r, s.exercises[i]))
+        : [h('p', { class: 'muted' }, 'Esta sesión aún no tiene ejercicios. ', h('a', { href: `#/editar/${habit.id}` }, 'Añádelos en la rutina'), '.')]));
+    }
+    show(session);
 
     return h('div', { style: { display: 'contents' } },
       h('div', { class: 'sheet-head' },
@@ -76,12 +94,13 @@ export function openWorkoutSheet(habit, key, ctx) {
         h('h2', {}, `${habit.name} · ${relativeDay(key, today)}`),
         h('button', { class: 'icon-btn small', 'aria-label': 'Cerrar', onClick: close }, '✕'),
       ),
-      h('p', { class: 'muted small' }, key === today ? 'Ajusta lo que cambió respecto a la última vez y guarda.' : `Editando el ${formatDate(key, { weekday: 'long', day: 'numeric', month: 'long' })}.`),
+      habit.sessions.length > 1 ? tabs : null,
+      hint,
       body,
       h('div', { class: 'sheet-actions' },
         h('button', { class: 'btn primary', onClick: () => {
           close();
-          ctx.logWorkout(habit, key, rows.filter((r) => r.done));
+          ctx.logWorkout(habit, key, rows.filter((r) => r.done), session.id);
         } }, 'Guardar sesión'),
         alreadyDone
           ? h('button', { class: 'btn danger', onClick: () => { close(); ctx.logEntry(habit, key, null); } }, 'Desmarcar día')
