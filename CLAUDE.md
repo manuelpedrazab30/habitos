@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Qué es
 
-Panel personal (UI en español) con dos secciones: **Hábitos** (el seguimiento de hábitos original) y **Finanzas**. Se cambia de sección con el selector de la barra superior; cada sección tiene su propia barra de navegación inferior. Objetivos de producto que guían las decisiones:
+Panel personal tipo "cerebro digital" (UI en español) con cuatro secciones: **Inicio** (resumen de todo), **Hábitos** (el seguimiento de hábitos original), **Finanzas** y **Correo**. Se cambia de sección con el selector de la barra superior; cada sección tiene su propia barra de navegación inferior. Objetivos de producto que guían las decisiones:
 - **Mínima fricción**: registrar un hábito es un toque desde la vista "Hoy"; registrar un gasto es importe → categoría → Guardar. Sin cuentas ni backend.
 - **Gamificación basada en datos**: rachas, XP/niveles y mensajes de motivación que siempre dicen una distancia concreta ("te faltan 2,4 kg; a tu ritmo llegas el 25 dic, 31 días antes del plazo"). Nada de frases genéricas o cliché.
 - **Visualización para detectar áreas de mejora**: mapas de calor, cumplimiento por día de la semana, hábitos que más han caído, proyección hacia la meta.
@@ -38,6 +38,10 @@ src/store.js  estado único + persistencia en localStorage
 src/ui/       vistas: funciones (state, ctx) → elemento DOM
 src/app.js    arranque, router por hash, feedback de gamificación (toasts de XP/récord/nivel)
 src/ui/finance/  sección de finanzas: overview (resumen + alta inicial), transactions, accounts, entrySheet
+src/ui/home.js   Inicio: lo más importante de los tres módulos + una tarjeta por módulo
+src/inbox/       Correo: gmail.js (OAuth + API), ai.js (resumen con Claude), state.js (config/caché/refresh)
+src/ui/inbox/    vistas del correo: overview (resumen), list (bandeja), connect (conexión)
+vendor/          SDK oficial de Anthropic (bundle ESM 1.8.0, Apache-2.0), cargado solo para el resumen con IA
 src/demo.js   datos de ejemplo: demoState (hábitos) y demoFinance (finanzas), cada uno sin tocar la otra sección
 sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPhone/Android)
 ```
@@ -90,6 +94,13 @@ sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPho
 - WebCrypto solo existe en contexto seguro (HTTPS o localhost): por HTTP en la red local la copia cifrada no está disponible (Ajustes lo avisa).
 - Restaurar acepta copias cifradas (pide contraseña) y exportaciones JSON sin cifrar; siempre muestra un resumen y se puede deshacer. `localStorage['panel.lastBackup']` guarda la fecha de la última copia; `backupOverdue` (hay datos y nunca, o ≥ 7 días) pone un punto en Ajustes (barra de Hábitos) y en el ⚙ de Finanzas.
 
+### Correo (`domain/inbox.js`, `src/inbox/`, `src/ui/inbox/`)
+- Proveedor-neutro: Gmail (y en el futuro Outlook) se traduce al formato de mensaje de la cabecera de `domain/inbox.js`. Las reglas (`analyzeMessage`/`digest`/`inboxMessages`) funcionan sin IA: pide respuesta (interrogación o petición explícita de una persona, no de remitentes automáticos/boletines), facturas (palabra de pago + importe con moneda; `billRecorded` mira si ya hay un gasto igual ±7 días en Finanzas), fechas (solo con palabra de plazo: "vence", "antes del", "reunión"…), boletines y códigos. Puntuación → "Requiere tu atención".
+- **Gmail sin servidor**: OAuth 2.0 de token por redirección (`response_type=token`, permiso `gmail.readonly`), sin librerías de Google. `handleOAuthRedirect()` corre en `app.js` **antes de pintar** (Google devuelve `#access_token=…` en el hash, que choca con el router), comprueba `state` y guarda el token en `sessionStorage` (~1 h; al caducar, "Actualizar" vuelve a pasar por Google). Solo se leen cabeceras y `snippet` (`format=metadata`), nunca el cuerpo. El usuario crea su propio ID de cliente en Google Cloud (guía en Correo → Conexión; la URI de redirección es `redirectUri()` = origen + ruta) y se añade como usuario de prueba.
+- **Resumen con IA (opcional)**: `inbox/ai.js` usa el SDK oficial (`vendor/anthropic-sdk-1.8.0.mjs`, `import()` dinámico solo al pedir resumen) con `dangerouslyAllowBrowser: true` y la clave del usuario. Modelo por defecto `claude-opus-5-5` (`effort: low`, salida JSON con `output_config.format` + esquema, `fallbacks: "default"` con la beta `server-side-fallback-2026-07-01` en Opus/Sonnet; Haiku 5.5 como opción barata, sin fallback). Se envían remitente, asunto, extracto y etiquetas de hasta 40 correos. El prompt trata los correos como datos, no como instrucciones. Comprueba `stop_reason` (`refusal`, `max_tokens`) antes de leer el texto.
+- **Fuera del estado de la app** a propósito: `localStorage['panel.inbox.config']` (id de cliente, cuenta, clave de Claude, modelo, días) y `['panel.inbox.cache']` (última lectura + último resumen). Así las copias cifradas no incluyen correos ni claves, y `store.js` no sabe nada del correo. Las vistas leen la caché con `currentDigest(finance)`; `ctx.refreshInbox()` / `ctx.runInboxAi()` vuelven a pintar al terminar.
+- Modo ejemplo (`demoInbox`, correos ficticios) para probar sin cuenta. Las facturas detectadas ofrecen "Añadir a gastos" (abre `ctx.openEntry` con importe, remitente y fecha).
+
 ### Principio clave: todo lo derivado se calcula, nunca se guarda
 Rachas, XP, niveles, estadísticas y mensajes se recalculan desde `entries` en cada render. Así, deshacer un registro o rellenar días pasados deja todo coherente sin contadores que sincronizar. No persistas XP ni rachas.
 
@@ -119,6 +130,6 @@ Los días son claves locales `'YYYY-MM-DD'`, comparables como strings. Usa siemp
 - Cada cambio del store re-renderiza la vista activa entera (salvo si hay un `form.habit-form` en pantalla, para no perder lo que el usuario escribe). El estado efímero de UI (día seleccionado en Hoy, rangos de gráficas, editor de día abierto) vive en `ctx.ui` en `app.js`.
 - Todo registro debe pasar por `ctx.logEntry()` / `ctx.logWorkout()` (ambos usan `withFeedback` en `app.js`), no por el store directamente: calculan la XP ganada, detectan récords (de racha y de peso) y subidas de nivel y ofrecen "Deshacer".
 - Modales: `ui/sheet.js` (`openSheet`) monta la hoja en `<body>`, fuera de `#view`, así que sobrevive a los re-render; se cierra con el fondo, Escape o al cambiar de ruta. `element.append()` tampoco ignora `null`: filtra antes.
-- Rutas: `#/` (Hoy), `#/progreso`, `#/nuevo[?t=índice de plantilla]`, `#/editar/:id`, `#/habito/:id`, `#/ajustes` (+ las de finanzas). Atajos de teclado: `h`, `p`, `n`, `f` (finanzas), `g` (nuevo gasto).
+- Rutas: `#/` (Hoy), `#/progreso`, `#/nuevo[?t=índice de plantilla]`, `#/editar/:id`, `#/habito/:id`, `#/ajustes` (+ las de finanzas). Atajos de teclado: `h`, `p`, `n`, `f` (finanzas), `g` (nuevo gasto), `i` (inicio), `c` (correo). Rutas del correo e inicio: `#/inicio`, `#/correo`, `#/correo/bandeja`, `#/correo/conexion`. Sin ruta, la app abre la última sección usada (la primera vez, Inicio).
 - La barra superior (`#sections`, `#level`) y la inferior (`#nav`) las pinta `app.js` (`renderNav`/`renderHeader`) según la sección; `index.html` solo tiene los contenedores.
 - Gráficas SVG hechas a mano en `ui/charts.js` (`heatmap`, `lineChart`, `barChart`, `ring`). No añadas librerías de gráficas: el proyecto evita dependencias y pasos de build.

@@ -3,7 +3,7 @@
 // obsoletas tras un despliegue); sin conexión, la última copia guardada.
 // Solo se registra en HTTPS fuera de localhost (ver src/app.js), así no interfiere en desarrollo.
 
-const CACHE = 'habitos-v8';
+const CACHE = 'habitos-v9';
 const SHELL = [
   './', 'index.html', 'styles.css', 'themes/holo.css', 'themes/hud.css', 'themes/gold.css', 'fonts/space-grotesk-latin.woff2', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
@@ -15,6 +15,8 @@ const SHELL = [
   'src/ui/sheet.js', 'src/ui/workoutSheet.js', 'src/ui/confetti.js',
   'src/domain/finance.js', 'src/ui/finance/overview.js', 'src/ui/finance/transactions.js',
   'src/ui/finance/accounts.js', 'src/ui/finance/entrySheet.js', 'src/ui/theme.js', 'src/ui/symbols.js',
+  'src/domain/inbox.js', 'src/inbox/gmail.js', 'src/inbox/ai.js', 'src/inbox/state.js',
+  'src/ui/home.js', 'src/ui/inbox/overview.js', 'src/ui/inbox/list.js', 'src/ui/inbox/connect.js',
 ];
 
 self.addEventListener('install', (e) => {

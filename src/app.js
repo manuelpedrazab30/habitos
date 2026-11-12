@@ -20,6 +20,12 @@ import { transactionsView } from './ui/finance/transactions.js';
 import { accountsView } from './ui/finance/accounts.js';
 import { openEntrySheet } from './ui/finance/entrySheet.js';
 import { demoFinance } from './demo.js';
+import { homeView } from './ui/home.js';
+import { inboxOverviewView } from './ui/inbox/overview.js';
+import { inboxListView } from './ui/inbox/list.js';
+import { inboxConnectView } from './ui/inbox/connect.js';
+import { handleOAuthRedirect } from './inbox/gmail.js';
+import { inboxBusy, refreshInbox, runAi, saveInboxConfig } from './inbox/state.js';
 
 // Arranque, router por hash y feedback de gamificación.
 // Cada cambio en el store vuelve a renderizar la vista activa entera (las vistas son
@@ -57,6 +63,15 @@ const ctx = {
     if (message) toast(message, { tone: 'good', action: 'Deshacer', onAction: () => store.undo() });
   },
   /** Hoja de registro rápido. opts: { type, tx } (tx = editar un movimiento). */
+  /** Correo: leer la bandeja (Gmail o ejemplo) y, si hay clave, pedir el resumen con IA. */
+  refreshInbox() {
+    const st = store.get();
+    return refreshInbox({ finance: st.finance, currency: st.finance.currency, onChange: () => render() });
+  },
+  runInboxAi() {
+    const st = store.get();
+    return runAi({ finance: st.finance, currency: st.finance.currency, onChange: () => render() });
+  },
   openEntry(opts = {}) {
     openEntrySheet(ctx, opts);
   },
@@ -129,6 +144,10 @@ function celebrate(habitId) {
 
 const routes = [
   [/^#\/?$/, (st) => todayView(st, ctx)],
+  [/^#\/inicio$/, (st) => homeView(st, ctx)],
+  [/^#\/correo$/, (st) => inboxOverviewView(st, ctx)],
+  [/^#\/correo\/bandeja$/, (st) => inboxListView(st, ctx)],
+  [/^#\/correo\/conexion$/, (st) => inboxConnectView(st, ctx)],
   [/^#\/finanzas$/, (st) => financeOverviewView(st, ctx)],
   [/^#\/finanzas\/nuevo$/, (st) => { setTimeout(() => ctx.openEntry(), 0); return financeOverviewView(st, ctx); }],
   [/^#\/finanzas\/movimientos$/, (st) => transactionsView(st, ctx)],
@@ -153,31 +172,35 @@ function render() {
   renderNav(path);
 }
 
-// ── Panel: dos secciones con su propia navegación inferior
+// ── Panel: cuatro secciones (Inicio, Hábitos, Finanzas, Correo), cada una con su barra inferior.
+// Elementos especiales: 'gasto' abre el registro rápido; 'refresh' actualiza el correo.
 const NAVS = {
+  inicio: [['#/inicio', '◉', 'Inicio'], ['#/', '◎', 'Hábitos'], ['gasto', '＋', 'Gasto', 'add'], ['#/correo', '✉', 'Correo']],
   habitos: [['#/', '◎', 'Hoy'], ['#/progreso', '▤', 'Progreso'], ['#/nuevo', '＋', 'Nuevo', 'add'], ['#/ajustes', '⚙', 'Ajustes']],
   finanzas: [['#/finanzas', '◔', 'Resumen'], ['#/finanzas/movimientos', '≡', 'Movimientos'], ['gasto', '＋', 'Gasto', 'add'], ['#/finanzas/cuentas', '▣', 'Cuentas']],
+  correo: [['#/correo', '◔', 'Resumen'], ['#/correo/bandeja', '≡', 'Bandeja'], ['refresh', '↻', 'Actualizar', 'add'], ['#/correo/conexion', '⚙', 'Conexión']],
 };
-const sectionOf = (path) => (path.startsWith('#/finanzas') ? 'finanzas' : 'habitos');
+const SECTIONS = [['inicio', '#/inicio', 'Inicio'], ['habitos', '#/', 'Hábitos'], ['finanzas', '#/finanzas', 'Finanzas'], ['correo', '#/correo', 'Correo']];
+const sectionOf = (path) => (path.startsWith('#/inicio') ? 'inicio' : path.startsWith('#/finanzas') ? 'finanzas' : path.startsWith('#/correo') ? 'correo' : 'habitos');
 
 function renderNav(path) {
   const section = sectionOf(path);
   localStorage.setItem(SECTION_KEY, section);
   document.body.dataset.section = section;
-  sections.replaceChildren(
-    h('a', { href: '#/', class: section === 'habitos' ? 'on' : '' }, 'Hábitos'),
-    h('a', { href: '#/finanzas', class: section === 'finanzas' ? 'on' : '' }, 'Finanzas'),
-  );
+  sections.replaceChildren(...SECTIONS.map(([id, href, label]) => h('a', { href, class: section === id ? 'on' : '' }, label)));
   const current = path === '#' || path === '' ? '#/' : path === '#/finanzas/nuevo' ? '#/finanzas' : path;
   // Punto de aviso en Ajustes cuando toca hacer copia de seguridad (src/backup.js)
   const alert = backupOverdue(store.get()) ? 'alert' : '';
-  nav.replaceChildren(...NAVS[section].map(([href, icon, label, cls]) => (href === 'gasto'
-    ? h('button', { type: 'button', class: `nav-item ${cls || ''}`, onClick: () => ctx.openEntry() }, h('span', { 'aria-hidden': 'true' }, icon), label)
+  nav.replaceChildren(...NAVS[section].map(([href, icon, label, cls]) => (href === 'gasto' || href === 'refresh'
+    ? h('button', {
+      type: 'button', class: `nav-item ${cls || ''} ${href === 'refresh' && inboxBusy() ? 'spinning' : ''}`,
+      onClick: () => (href === 'gasto' ? ctx.openEntry() : ctx.refreshInbox()),
+    }, h('span', { 'aria-hidden': 'true' }, icon), href === 'refresh' && inboxBusy() ? (inboxBusy() === 'ai' ? 'Resumiendo' : 'Leyendo') : label)
     : h('a', { href, class: `nav-item ${cls || ''} ${href === current ? 'on' : ''} ${href === '#/ajustes' ? alert : ''}`, title: href === '#/ajustes' && alert ? 'Toca hacer copia de seguridad' : null }, h('span', { 'aria-hidden': 'true' }, icon), label))));
 }
 
 function renderHeader(state) {
-  if (sectionOf((location.hash || '#/').split('?')[0]) === 'finanzas') {
+  if (sectionOf((location.hash || '#/').split('?')[0]) !== 'habitos') {
     const overdue = backupOverdue(state);
     header.replaceChildren(h('a', { href: '#/ajustes', class: `icon-link ${overdue ? 'alert' : ''}`, 'aria-label': overdue ? 'Ajustes: toca hacer copia de seguridad' : 'Ajustes', title: overdue ? 'Toca hacer copia de seguridad' : 'Ajustes (copia de seguridad, estilo)' }, '⚙'));
     return;
@@ -248,13 +271,25 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'h') ctx.go('#/');
   if (e.key === 'p') ctx.go('#/progreso');
   if (e.key === 'f') ctx.go('#/finanzas');
+  if (e.key === 'i') ctx.go('#/inicio');
+  if (e.key === 'c') ctx.go('#/correo');
   if (e.key === 'g') { e.preventDefault(); ctx.openEntry(); }
 });
 
 // Al abrir la app sin ruta, vuelve a la última sección usada
-if (!location.hash && localStorage.getItem(SECTION_KEY) === 'finanzas') location.replace('#/finanzas');
+// Vuelta de la pantalla de Google (Gmail): antes de pintar, para que el router no vea el token
+const oauth = handleOAuthRedirect();
+if (oauth?.ok) saveInboxConfig({ mode: 'gmail' });
+// Al abrir la app sin ruta, vuelve a la última sección usada (la primera vez, Inicio)
+if (!location.hash) {
+  const last = localStorage.getItem(SECTION_KEY);
+  const start = { finanzas: '#/finanzas', correo: '#/correo', habitos: '#/' }[last] || '#/inicio';
+  if (start !== '#/') location.replace(start);
+}
 initTheme();
 markEnter();
 render();
 // Que el navegador no borre los datos por falta de espacio (en la app instalada suele concederse)
 requestPersistentStorage();
+if (oauth?.ok) ctx.refreshInbox();
+else if (oauth?.error) toast(oauth.error, { tone: 'bad', timeout: 6000 });

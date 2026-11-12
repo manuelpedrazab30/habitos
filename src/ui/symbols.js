@@ -60,6 +60,7 @@ const ICONS = {
   trophy: P('M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20.5h7M10 17h4v3.5h-4z'),
   water: P('M3 15c2 0 2-1.5 4.5-1.5S9.5 15 12 15s2-1.5 4.5-1.5S18.5 15 21 15M3 19c2 0 2-1.5 4.5-1.5S9.5 19 12 19s2-1.5 4.5-1.5S18.5 19 21 19') + P('M12 3s3.5 3.8 3.5 6.5a3.5 3.5 0 0 1-7 0C8.5 6.8 12 3 12 3z'),
   plus: P('M12 5v14M5 12h14'),
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/>' + P('M3.5 6.5L12 13l8.5-6.5'),
 };
 
 /** Emoji (sin selector de variante ni tono de piel) → icono. */
@@ -71,7 +72,7 @@ const MAP = {
   '❤': 'heart', '💖': 'heart', '📦': 'box', '❔': 'question', '❓': 'question', '✈': 'plane', '🐾': 'paw', '🎁': 'gift', '☕': 'cup',
   '⛽': 'fuel', '👶': 'smile', '🙂': 'smile', '🏦': 'bank', '💳': 'card', '💵': 'cash', '💶': 'cash', '🐷': 'savings', '📈': 'chartUp',
   '👛': 'wallet', '🌍': 'globe', '🌎': 'globe', '🔥': 'flame', '📌': 'pin', '⚙': 'gear', '✎': 'pencil', '✏': 'pencil', '⬆': 'share',
-  '🎯': 'target', '⏰': 'clock', '⏱': 'clock', '📅': 'calendar', '🏆': 'trophy', '➕': 'plus',
+  '🎯': 'target', '⏰': 'clock', '⏱': 'clock', '📅': 'calendar', '🏆': 'trophy', '➕': 'plus', '\u2709': 'mail', '📧': 'mail', '📨': 'mail',
 };
 
 // Clave del mapa: primer carácter, sin selector de variante ni tono de piel

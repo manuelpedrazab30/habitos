@@ -164,6 +164,9 @@ html:is([data-theme="hud"], [data-theme="gold"]) .topbar {
 }
 html:is([data-theme="hud"], [data-theme="gold"]) .section-switch { background: transparent; border: 1px solid var(--hud-dim); border-radius: 3px; }
 html:is([data-theme="hud"], [data-theme="gold"]) .section-switch a { border-radius: 2px; text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.74rem; color: var(--muted); }
+@media (max-width: 600px) {
+  html:is([data-theme="hud"], [data-theme="gold"]) .section-switch a { letter-spacing: 0.06em; font-size: 0.66rem; padding: 6px 7px; }
+}
 html:is([data-theme="hud"], [data-theme="gold"]) .section-switch a.on { background: var(--hud-faint); color: var(--hud-strong); box-shadow: inset 0 0 0 1px var(--hud-dim), var(--glow); text-shadow: 0 0 8px rgba(var(--h-rgb), 0.8); }
 html:is([data-theme="hud"], [data-theme="gold"]) .level-chip .lvl { font-family: var(--font-num); color: var(--hud-strong); text-shadow: 0 0 8px rgba(var(--h-rgb), 0.7); }
 html:is([data-theme="hud"], [data-theme="gold"]) .nav {
