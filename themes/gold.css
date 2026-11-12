@@ -1,0 +1,75 @@
+/* Tema "Dorado" (versión B): holograma ámbar/dorado sobre azul noche. La base visual
+   (paneles, escaneo, anillos, animaciones) está en themes/holo.css; aquí van sus
+   colores y la adaptación de los colores de datos al dorado.
+   Los emojis se sustituyen por iconos de línea (src/ui/symbols.js, solo en este tema). */
+
+html[data-theme="gold"] {
+  --h-rgb: 255, 190, 70;          /* dorado principal */
+  --h2-rgb: 255, 228, 160;        /* dorado claro */
+  --glow-rgb: 255, 160, 30;
+  --warm-rgb: 70, 120, 220;       /* contrapunto azul del fondo */
+  --amber-rgb: 120, 175, 255;     /* acento secundario: azul acero */
+  --good-rgb: 200, 236, 110;
+  --bad-rgb: 255, 106, 74;
+  --warn: #ff9a3d;
+  --bg: #03060c;
+  --bg-rgb: 3, 6, 12;
+  --deep-rgb: 8, 12, 22;
+  --panel-top: rgba(26, 30, 44, 0.55);
+  --surface: rgba(20, 22, 32, 0.6);
+  --text: #f6ead2;
+  --muted: #a8977a;
+  --on-fill: #1a1000;
+  --on-primary: #fff6e0;
+  --insight: #8fb8ff;
+  /* Tipografía: Space Grotesk, definida en holo.css (común a A y B) */
+  --confetti: #ffbe46, #ffe4a0, #ff9a3d, #fff6e0, #78afff;
+}
+
+/* ── Colores de hábitos y categorías → gama dorada (siguen siendo distinguibles).
+   Las tarjetas reciben --c en línea; !important gana al estilo en línea. */
+html[data-theme="gold"] [style*="--c: #6366f1"] { --c: #ffc94d !important; }
+html[data-theme="gold"] [style*="--c: #10b981"] { --c: #e8f07a !important; }
+html[data-theme="gold"] [style*="--c: #f59e0b"] { --c: #ffa53a !important; }
+html[data-theme="gold"] [style*="--c: #ef4444"] { --c: #ff7048 !important; }
+html[data-theme="gold"] [style*="--c: #06b6d4"] { --c: #ffe7a3 !important; }
+html[data-theme="gold"] [style*="--c: #ec4899"] { --c: #ff8f5e !important; }
+html[data-theme="gold"] [style*="--c: #8b5cf6"] { --c: #d9a441 !important; }
+html[data-theme="gold"] [style*="--c: #84cc16"] { --c: #fff3c4 !important; }
+html[data-theme="gold"] [style*="--c: #f43f5e"] { --c: #ff6a4a !important; }
+html[data-theme="gold"] [style*="--c: #64748b"] { --c: #b8a27a !important; }
+html[data-theme="gold"] [style*="--c: #94a3b8"] { --c: #c9b48a !important; }
+/* Muestras de color del formulario (style="background: rgb(…)") */
+html[data-theme="gold"] .swatch[style*="rgb(99, 102, 241)"] { background: #ffc94d !important; }
+html[data-theme="gold"] .swatch[style*="rgb(16, 185, 129)"] { background: #e8f07a !important; }
+html[data-theme="gold"] .swatch[style*="rgb(245, 158, 11)"] { background: #ffa53a !important; }
+html[data-theme="gold"] .swatch[style*="rgb(239, 68, 68)"] { background: #ff7048 !important; }
+html[data-theme="gold"] .swatch[style*="rgb(6, 182, 212)"] { background: #ffe7a3 !important; }
+html[data-theme="gold"] .swatch[style*="rgb(236, 72, 153)"] { background: #ff8f5e !important; }
+html[data-theme="gold"] .swatch[style*="rgb(139, 92, 246)"] { background: #d9a441 !important; }
+html[data-theme="gold"] .swatch[style*="rgb(132, 204, 22)"] { background: #fff3c4 !important; }
+
+/* Gráficas: todo en dorado (los colores llegan en línea desde charts.js) */
+html[data-theme="gold"] .heatmap .cell[style] { fill: rgb(var(--h-rgb)) !important; }
+html[data-theme="gold"] .chart .bar rect:first-child { fill: rgb(var(--h-rgb)) !important; }
+html[data-theme="gold"] .chart .bar.highlight rect:first-child { fill: var(--amber) !important; }
+html[data-theme="gold"] .chart .line,
+html[data-theme="gold"] .chart .projection { stroke: rgb(var(--h-rgb)); }
+html[data-theme="gold"] .chart .dot { fill: rgb(var(--h2-rgb)); }
+
+/* ── Iconos de línea en lugar de emojis (src/ui/symbols.js) */
+html[data-theme="gold"] .sym {
+  display: inline-flex; width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none;
+  color: var(--c, rgb(var(--h-rgb)));
+  filter: drop-shadow(0 0 4px rgba(var(--h-rgb), 0.55));
+}
+html[data-theme="gold"] .sym svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+/* Emoji sin icono propio: silueta en el color del tema */
+html[data-theme="gold"] .sym-fallback { color: transparent; text-shadow: 0 0 0 var(--c, rgb(var(--h-rgb))); width: auto; height: auto; vertical-align: baseline; }
+html[data-theme="gold"] .emoji { display: inline-flex; align-items: center; justify-content: center; }
+html[data-theme="gold"] .emoji .sym { width: 1em; height: 1em; }
+html[data-theme="gold"] .habit-card .emoji .sym,
+html[data-theme="gold"] .detail-head .emoji .sym { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c, rgb(var(--h-rgb))) 70%, transparent)); }
+html[data-theme="gold"] .tx-icon .sym,
+html[data-theme="gold"] .cat-pick .sym { width: 0.95em; height: 0.95em; }
+html[data-theme="gold"] .nav .nav-item .sym { width: 1em; height: 1em; }

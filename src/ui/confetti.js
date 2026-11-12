@@ -30,7 +30,9 @@ export function confetti({ origin = null, color = null } = {}) {
   const visible = r && r.bottom > 0 && r.top < H;
   const x0 = visible ? r.left + r.width / 2 : W / 2;
   const y0 = visible ? r.top + r.height / 2 : H * 0.3;
-  const colors = color ? [color, color, ...PALETTE] : PALETTE;
+  // Un tema puede fijar su paleta con --confetti (lista de colores); entonces manda sobre el color del hábito
+  const themed = getComputedStyle(document.documentElement).getPropertyValue('--confetti').split(',').map((c) => c.trim()).filter(Boolean);
+  const colors = themed.length ? themed : color ? [color, color, ...PALETTE] : PALETTE;
 
   const parts = Array.from({ length: COUNT }, () => {
     const angle = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 0.9; // abanico hacia arriba

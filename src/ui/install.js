@@ -34,6 +34,6 @@ export function installCard() {
   return h('div', { class: 'card' },
     h('h2', {}, 'Añadir a la pantalla de inicio'),
     h('p', { class: 'muted' }, 'En iPhone: ', steps(), ' Se abrirá a pantalla completa, como una app.'),
-    h('p', { class: 'muted small' }, 'Los datos de la app instalada son independientes de los de Safari: si ya tenías registros, expórtalos aquí e impórtalos dentro de la app.'),
+    h('p', { class: 'muted small' }, 'Los datos de la app instalada son independientes de los de Safari: si ya tenías registros, haz una copia cifrada aquí y restáurala dentro de la app.'),
   );
 }

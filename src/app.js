@@ -8,6 +8,8 @@ import { fmt } from './domain/messages.js';
 import { isDone } from './domain/habits.js';
 import { h, hideTip, toast } from './ui/dom.js';
 import { confetti } from './ui/confetti.js';
+import { initTheme } from './ui/theme.js';
+import { backupOverdue, requestPersistentStorage } from './backup.js';
 import { todayView } from './ui/today.js';
 import { habitFormView } from './ui/habitForm.js';
 import { habitDetailView } from './ui/habitDetail.js';
@@ -167,14 +169,17 @@ function renderNav(path) {
     h('a', { href: '#/finanzas', class: section === 'finanzas' ? 'on' : '' }, 'Finanzas'),
   );
   const current = path === '#' || path === '' ? '#/' : path === '#/finanzas/nuevo' ? '#/finanzas' : path;
+  // Punto de aviso en Ajustes cuando toca hacer copia de seguridad (src/backup.js)
+  const alert = backupOverdue(store.get()) ? 'alert' : '';
   nav.replaceChildren(...NAVS[section].map(([href, icon, label, cls]) => (href === 'gasto'
     ? h('button', { type: 'button', class: `nav-item ${cls || ''}`, onClick: () => ctx.openEntry() }, h('span', { 'aria-hidden': 'true' }, icon), label)
-    : h('a', { href, class: `nav-item ${cls || ''} ${href === current ? 'on' : ''}` }, h('span', { 'aria-hidden': 'true' }, icon), label))));
+    : h('a', { href, class: `nav-item ${cls || ''} ${href === current ? 'on' : ''} ${href === '#/ajustes' ? alert : ''}`, title: href === '#/ajustes' && alert ? 'Toca hacer copia de seguridad' : null }, h('span', { 'aria-hidden': 'true' }, icon), label))));
 }
 
 function renderHeader(state) {
   if (sectionOf((location.hash || '#/').split('?')[0]) === 'finanzas') {
-    header.replaceChildren(h('a', { href: '#/ajustes', class: 'icon-link', 'aria-label': 'Ajustes', title: 'Ajustes (exportar, importar)' }, '⚙'));
+    const overdue = backupOverdue(state);
+    header.replaceChildren(h('a', { href: '#/ajustes', class: `icon-link ${overdue ? 'alert' : ''}`, 'aria-label': overdue ? 'Ajustes: toca hacer copia de seguridad' : 'Ajustes', title: overdue ? 'Toca hacer copia de seguridad' : 'Ajustes (copia de seguridad, estilo)' }, '⚙'));
     return;
   }
   const lv = levelInfo(totalXp(state, todayKey()));
@@ -191,8 +196,16 @@ store.subscribe(() => {
   if (main.querySelector('form.habit-form')) return renderHeader(store.get());
   render();
 });
+// Clase .enter durante la carga y cada cambio de ruta: los temas pueden animar la entrada
+// sin repetirla en cada re-render (cada registro vuelve a pintar la vista).
+function markEnter() {
+  main.classList.add('enter');
+  clearTimeout(markEnter.t);
+  markEnter.t = setTimeout(() => main.classList.remove('enter'), 900);
+}
 window.addEventListener('hashchange', () => {
   ctx.ui.editKey = null;
+  markEnter();
   render();
   window.scrollTo(0, 0);
 });
@@ -240,4 +253,8 @@ document.addEventListener('keydown', (e) => {
 
 // Al abrir la app sin ruta, vuelve a la última sección usada
 if (!location.hash && localStorage.getItem(SECTION_KEY) === 'finanzas') location.replace('#/finanzas');
+initTheme();
+markEnter();
 render();
+// Que el navegador no borre los datos por falta de espacio (en la app instalada suele concederse)
+requestPersistentStorage();

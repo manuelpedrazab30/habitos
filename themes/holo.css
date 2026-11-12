@@ -1,0 +1,289 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Base "holograma" compartida por los temas HUD (A, cian) y Dorado (B).
+   Paneles finos con esquinas en escuadra, rejilla y escaneo de fondo, anillos con
+   marcas, mayúsculas espaciadas, cifras con brillo y animación de entrada.
+   Los colores salen de variables que define cada tema (themes/hud.css, gold.css):
+     --h-rgb / --h2-rgb   color principal y su versión clara (r, g, b)
+     --glow-rgb --warm-rgb  resplandores del fondo
+     --amber-rgb --good-rgb --bad-rgb   acento secundario y estados
+     --panel-top --panel-bot --deep-rgb --bg-rgb   superficies
+     --on-fill --on-primary --insight   texto sobre relleno, botón principal, mensaje "insight"
+     --font-hud --font-head --font-num  tipografías
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Space Grotesk (SIL OFL 1.1, fonts/OFL-SpaceGrotesk.txt): fuente de A y B, incluida en el
+   proyecto para que funcione sin conexión. Variable 300–700, subconjunto latino (á é ñ ¿ € …). */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("../fonts/space-grotesk-latin.woff2") format("woff2");
+}
+
+html:is([data-theme="hud"], [data-theme="gold"]) {
+  --font-hud: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: var(--font-hud);
+  --font-num: var(--font-hud);
+  --hud: rgb(var(--h-rgb));
+  --hud-strong: rgb(var(--h2-rgb));
+  --hud-dim: rgba(var(--h-rgb), 0.28);
+  --hud-faint: rgba(var(--h-rgb), 0.08);
+  --amber: rgb(var(--amber-rgb));
+  --accent: var(--hud);
+  --good: rgb(var(--good-rgb));
+  --bad: rgb(var(--bad-rgb));
+  --border: rgba(var(--h-rgb), 0.22);
+  --surface-2: rgba(var(--h-rgb), 0.07);
+  --radius: 4px;
+  --shadow: none;
+  --glow: 0 0 12px rgba(var(--h-rgb), 0.35);
+  color-scheme: dark;
+}
+
+
+/* ── Fondo: resplandor, rejilla, escaneo y anillos girando */
+html:is([data-theme="hud"], [data-theme="gold"]) body {
+  font-family: var(--font-hud);
+  letter-spacing: 0.01em;
+  background:
+    radial-gradient(1100px 520px at 50% -12%, rgba(var(--glow-rgb), 0.20), transparent 62%),
+    radial-gradient(700px 420px at 105% 110%, rgba(var(--warm-rgb), 0.07), transparent 60%),
+    linear-gradient(rgba(var(--h-rgb), 0.045) 1px, transparent 1px) 0 0 / 38px 38px,
+    linear-gradient(90deg, rgba(var(--h-rgb), 0.045) 1px, transparent 1px) 0 0 / 38px 38px,
+    var(--bg);
+  background-attachment: fixed;
+}
+html:is([data-theme="hud"], [data-theme="gold"]) body::before { /* líneas de escaneo */
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 90;
+  background: repeating-linear-gradient(to bottom, rgba(var(--h2-rgb), 0.022) 0 1px, transparent 1px 3px);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) body::after { /* anillos decorativos de fondo */
+  content: ""; position: fixed; z-index: -1; pointer-events: none;
+  width: 760px; height: 760px; right: -300px; top: -260px; border-radius: 50%;
+  border: 1px dashed rgba(var(--h-rgb), 0.12);
+  box-shadow: 0 0 0 46px rgba(var(--h-rgb), 0.025), inset 0 0 0 90px rgba(var(--h-rgb), 0.02);
+  outline: 2px dotted rgba(var(--h-rgb), 0.10); outline-offset: 70px;
+  animation: hud-spin 120s linear infinite;
+}
+@keyframes hud-spin { to { transform: rotate(360deg); } }
+
+/* ── Tipografía */
+html:is([data-theme="hud"], [data-theme="gold"]) h1,
+html:is([data-theme="hud"], [data-theme="gold"]) h2,
+html:is([data-theme="hud"], [data-theme="gold"]) .card-head h2,
+html:is([data-theme="hud"], [data-theme="gold"]) legend,
+html:is([data-theme="hud"], [data-theme="gold"]) .entry-label,
+html:is([data-theme="hud"], [data-theme="gold"]) .field .label,
+html:is([data-theme="hud"], [data-theme="gold"]) .kpi small,
+html:is([data-theme="hud"], [data-theme="gold"]) .pstat small,
+html:is([data-theme="hud"], [data-theme="gold"]) .tx-day-head,
+html:is([data-theme="hud"], [data-theme="gold"]) .lift-table th {
+  text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; font-family: var(--font-head);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) h1 { color: var(--hud-strong); text-shadow: 0 0 14px rgba(var(--h-rgb), 0.55); font-size: 1.3rem; }
+html:is([data-theme="hud"], [data-theme="gold"]) h2 { color: var(--hud); font-size: 0.82rem; }
+html:is([data-theme="hud"], [data-theme="gold"]) h1::before { content: "◢ "; color: var(--amber); font-size: 0.7em; vertical-align: 0.15em; text-shadow: none; }
+html:is([data-theme="hud"], [data-theme="gold"]) .day-title h1::before { content: none; }
+html:is([data-theme="hud"], [data-theme="gold"]) .muted { color: var(--muted); }
+html:is([data-theme="hud"], [data-theme="gold"]) a { color: var(--hud); }
+
+/* Cifras: monoespaciadas y con brillo */
+html:is([data-theme="hud"], [data-theme="gold"]) .money-big,
+html:is([data-theme="hud"], [data-theme="gold"]) .money-mid,
+html:is([data-theme="hud"], [data-theme="gold"]) .kpi b,
+html:is([data-theme="hud"], [data-theme="gold"]) .pstat b,
+html:is([data-theme="hud"], [data-theme="gold"]) .count-val b,
+html:is([data-theme="hud"], [data-theme="gold"]) .level-badge b,
+html:is([data-theme="hud"], [data-theme="gold"]) .tx-amount,
+html:is([data-theme="hud"], [data-theme="gold"]) .cat-amount,
+html:is([data-theme="hud"], [data-theme="gold"]) .fx-amount,
+html:is([data-theme="hud"], [data-theme="gold"]) .area-pct,
+html:is([data-theme="hud"], [data-theme="gold"]) .amount-input,
+html:is([data-theme="hud"], [data-theme="gold"]) .ring-label,
+html:is([data-theme="hud"], [data-theme="gold"]) .wk-count,
+html:is([data-theme="hud"], [data-theme="gold"]) .lift-table td b,
+html:is([data-theme="hud"], [data-theme="gold"]) .level-row strong {
+  font-family: var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; font-weight: 600;
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .money-big { color: var(--hud-strong); text-shadow: 0 0 18px rgba(var(--h-rgb), 0.6); }
+html:is([data-theme="hud"], [data-theme="gold"]) .money-big.neg { color: var(--bad); text-shadow: 0 0 18px rgba(var(--bad-rgb), 0.5); }
+html:is([data-theme="hud"], [data-theme="gold"]) .ring-label { fill: var(--hud-strong); font-size: 12px; }
+
+/* ── Paneles con esquinas en escuadra */
+html:is([data-theme="hud"], [data-theme="gold"]) .card,
+html:is([data-theme="hud"], [data-theme="gold"]) .habit-card,
+html:is([data-theme="hud"], [data-theme="gold"]) .msg,
+html:is([data-theme="hud"], [data-theme="gold"]) .habit-form fieldset,
+html:is([data-theme="hud"], [data-theme="gold"]) .ex-card {
+  position: relative;
+  background: linear-gradient(180deg, var(--panel-top), rgba(var(--deep-rgb), 0.6));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 28px rgba(var(--h-rgb), 0.05), 0 0 22px rgba(var(--glow-rgb), 0.06);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .card::after,
+html:is([data-theme="hud"], [data-theme="gold"]) .habit-card::after,
+html:is([data-theme="hud"], [data-theme="gold"]) .habit-form fieldset::after {
+  content: ""; position: absolute; inset: -1px; pointer-events: none; border-radius: inherit;
+  --k: 12px; --w: 2px; --cc: var(--hud);
+  background:
+    linear-gradient(var(--cc) 0 0) top left / var(--k) var(--w) no-repeat,
+    linear-gradient(var(--cc) 0 0) top left / var(--w) var(--k) no-repeat,
+    linear-gradient(var(--cc) 0 0) top right / var(--k) var(--w) no-repeat,
+    linear-gradient(var(--cc) 0 0) top right / var(--w) var(--k) no-repeat,
+    linear-gradient(var(--cc) 0 0) bottom left / var(--k) var(--w) no-repeat,
+    linear-gradient(var(--cc) 0 0) bottom left / var(--w) var(--k) no-repeat,
+    linear-gradient(var(--cc) 0 0) bottom right / var(--k) var(--w) no-repeat,
+    linear-gradient(var(--cc) 0 0) bottom right / var(--w) var(--k) no-repeat;
+  opacity: 0.85;
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .habit-card.done { border-color: color-mix(in srgb, var(--c) 55%, transparent); box-shadow: inset 0 0 26px color-mix(in srgb, var(--c) 14%, transparent), 0 0 18px color-mix(in srgb, var(--c) 16%, transparent); }
+html:is([data-theme="hud"], [data-theme="gold"]) .habit-card.done::after { --cc: var(--c); }
+html:is([data-theme="hud"], [data-theme="gold"]) .habit-card.kind-count::before { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 6%, transparent), color-mix(in srgb, var(--c) 20%, transparent)); border-right: 1px solid color-mix(in srgb, var(--c) 60%, transparent); }
+
+/* Mensajes: barra lateral luminosa (--mc = color según el tipo) */
+html:is([data-theme="hud"], [data-theme="gold"]) .msg {
+  --mc: var(--hud);
+  border-left: 1px solid var(--border); padding-left: 16px; font-size: 0.92rem;
+  box-shadow: inset 3px 0 0 var(--mc), -3px 0 16px -8px var(--mc), inset 0 0 28px rgba(var(--h-rgb), 0.04);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .msg.goal { --mc: var(--good); }
+html:is([data-theme="hud"], [data-theme="gold"]) .msg.risk { --mc: var(--bad); }
+html:is([data-theme="hud"], [data-theme="gold"]) .msg.streak { --mc: var(--amber); }
+html:is([data-theme="hud"], [data-theme="gold"]) .msg.today { --mc: var(--hud); }
+html:is([data-theme="hud"], [data-theme="gold"]) .msg.insight { --mc: var(--insight); }
+
+/* ── Barras superior e inferior */
+html:is([data-theme="hud"], [data-theme="gold"]) .topbar {
+  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.92), rgba(var(--bg-rgb), 0.6));
+  border-bottom: 1px solid var(--hud-dim);
+  box-shadow: 0 1px 14px rgba(var(--h-rgb), 0.12);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .section-switch { background: transparent; border: 1px solid var(--hud-dim); border-radius: 3px; }
+html:is([data-theme="hud"], [data-theme="gold"]) .section-switch a { border-radius: 2px; text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.74rem; color: var(--muted); }
+html:is([data-theme="hud"], [data-theme="gold"]) .section-switch a.on { background: var(--hud-faint); color: var(--hud-strong); box-shadow: inset 0 0 0 1px var(--hud-dim), var(--glow); text-shadow: 0 0 8px rgba(var(--h-rgb), 0.8); }
+html:is([data-theme="hud"], [data-theme="gold"]) .level-chip .lvl { font-family: var(--font-num); color: var(--hud-strong); text-shadow: 0 0 8px rgba(var(--h-rgb), 0.7); }
+html:is([data-theme="hud"], [data-theme="gold"]) .nav {
+  background: linear-gradient(0deg, rgba(var(--bg-rgb), 0.96), rgba(var(--deep-rgb), 0.9));
+  border-top: 1px solid var(--hud-dim);
+  box-shadow: 0 -1px 18px rgba(var(--h-rgb), 0.15);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .nav .nav-item { text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.66rem; border-radius: 3px; }
+html:is([data-theme="hud"], [data-theme="gold"]) .nav .nav-item.on { color: var(--hud-strong); background: var(--hud-faint); box-shadow: inset 0 -2px 0 var(--hud); text-shadow: 0 0 8px rgba(var(--h-rgb), 0.8); }
+html:is([data-theme="hud"], [data-theme="gold"]) .nav .nav-item.add span { color: var(--amber); text-shadow: 0 0 10px rgba(var(--amber-rgb), 0.7); }
+
+/* ── Controles */
+html:is([data-theme="hud"], [data-theme="gold"]) .btn {
+  border-radius: 3px; text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.8rem;
+  background: transparent; border: 1px solid var(--hud-dim); color: var(--hud-strong);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .btn:hover { box-shadow: var(--glow); border-color: var(--hud); }
+html:is([data-theme="hud"], [data-theme="gold"]) .btn.primary {
+  background: linear-gradient(180deg, rgba(var(--h-rgb), 0.28), rgba(var(--h-rgb), 0.12));
+  border-color: var(--hud); color: var(--on-primary); box-shadow: inset 0 0 14px rgba(var(--h-rgb), 0.25), 0 0 14px rgba(var(--h-rgb), 0.25);
+  text-shadow: 0 0 6px rgba(var(--h-rgb), 0.8);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .btn.danger { border-color: rgba(var(--bad-rgb), 0.5); color: var(--bad); }
+html:is([data-theme="hud"], [data-theme="gold"]) .icon-btn,
+html:is([data-theme="hud"], [data-theme="gold"]) .step,
+html:is([data-theme="hud"], [data-theme="gold"]) .mini-stepper button {
+  background: rgba(var(--deep-rgb), 0.7); border: 1px solid var(--hud-dim); color: var(--hud);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .step.plus { background: transparent; border-color: var(--c, var(--hud)); color: var(--c, var(--hud)); box-shadow: 0 0 10px color-mix(in srgb, var(--c, var(--hud)) 40%, transparent); }
+html:is([data-theme="hud"], [data-theme="gold"]) .check-btn {
+  border-color: color-mix(in srgb, var(--c) 70%, transparent); box-shadow: 0 0 10px color-mix(in srgb, var(--c) 30%, transparent), inset 0 0 8px color-mix(in srgb, var(--c) 20%, transparent);
+  outline: 1px dashed color-mix(in srgb, var(--c) 35%, transparent); outline-offset: 3px;
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .check-btn[aria-pressed="true"] { color: var(--on-fill); box-shadow: 0 0 18px color-mix(in srgb, var(--c) 70%, transparent); }
+html:is([data-theme="hud"], [data-theme="gold"]) .seg { background: transparent; border: 1px solid var(--hud-dim); border-radius: 3px; }
+html:is([data-theme="hud"], [data-theme="gold"]) .seg button { border-radius: 2px; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.74rem; }
+html:is([data-theme="hud"], [data-theme="gold"]) .seg button.on { background: var(--hud-faint); color: var(--hud-strong); box-shadow: inset 0 0 0 1px var(--hud-dim); }
+html:is([data-theme="hud"], [data-theme="gold"]) .chip { background: transparent; border-color: var(--hud-dim); border-radius: 3px; }
+html:is([data-theme="hud"], [data-theme="gold"]) .chip.on,
+html:is([data-theme="hud"], [data-theme="gold"]) .chip.pick.on { background: var(--hud-faint); border-color: var(--hud); color: var(--hud-strong); box-shadow: var(--glow); }
+html:is([data-theme="hud"], [data-theme="gold"]) .wd { border-radius: 2px; background: rgba(var(--h-rgb), 0.06); }
+html:is([data-theme="hud"], [data-theme="gold"]) .wd.on { background: var(--c); color: var(--on-fill); box-shadow: 0 0 10px color-mix(in srgb, var(--c) 60%, transparent); }
+html:is([data-theme="hud"], [data-theme="gold"]) .wd.sel { border-color: var(--hud-strong); }
+html:is([data-theme="hud"], [data-theme="gold"]) .tag { border-radius: 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+html:is([data-theme="hud"], [data-theme="gold"]) input,
+html:is([data-theme="hud"], [data-theme="gold"]) select {
+  background: rgba(var(--bg-rgb), 0.8); border-color: var(--hud-dim); border-radius: 3px; color: var(--text);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) input:focus,
+html:is([data-theme="hud"], [data-theme="gold"]) select:focus { outline: none; border-color: var(--hud); box-shadow: var(--glow); }
+html:is([data-theme="hud"], [data-theme="gold"]) :focus-visible { outline-color: var(--hud); }
+html:is([data-theme="hud"], [data-theme="gold"]) .amount-wrap { border-bottom-color: var(--hud-dim); }
+html:is([data-theme="hud"], [data-theme="gold"]) .amount-input { color: var(--hud-strong); text-shadow: 0 0 14px rgba(var(--h-rgb), 0.5); }
+html:is([data-theme="hud"], [data-theme="gold"]) .amount-input:focus { box-shadow: none; }
+html:is([data-theme="hud"], [data-theme="gold"]) .amount-wrap:focus-within { border-bottom-color: var(--hud); box-shadow: 0 6px 14px -10px var(--hud); }
+html:is([data-theme="hud"], [data-theme="gold"]) .cat-pick { background: rgba(var(--deep-rgb), 0.6); border-radius: 3px; }
+html:is([data-theme="hud"], [data-theme="gold"]) .cat-pick.on { box-shadow: 0 0 12px color-mix(in srgb, var(--c) 45%, transparent); }
+html:is([data-theme="hud"], [data-theme="gold"]) .session-tab { border-radius: 3px; background: transparent; border-color: var(--hud-dim); }
+html:is([data-theme="hud"], [data-theme="gold"]) .session-tab.on { background: var(--hud-faint); border-color: var(--hud); color: var(--hud-strong); box-shadow: var(--glow); }
+
+/* ── Barras de progreso y anillos */
+html:is([data-theme="hud"], [data-theme="gold"]) .bar { border-radius: 1px; background: rgba(var(--h-rgb), 0.08); box-shadow: inset 0 0 0 1px rgba(var(--h-rgb), 0.12); }
+html:is([data-theme="hud"], [data-theme="gold"]) .bar > span { border-radius: 1px; box-shadow: 0 0 10px var(--c, var(--hud)); }
+html:is([data-theme="hud"], [data-theme="gold"]) .ring-bg { stroke: rgba(var(--h-rgb), 0.35); stroke-dasharray: 1.5 3; }
+html:is([data-theme="hud"], [data-theme="gold"]) .ring-fg { filter: drop-shadow(0 0 4px rgba(var(--h-rgb), 0.8)); stroke-linecap: butt; }
+html:is([data-theme="hud"], [data-theme="gold"]) .level-badge {
+  border-radius: 50%; background: radial-gradient(circle, rgba(var(--h-rgb), 0.25), rgba(var(--deep-rgb), 0.9) 70%);
+  border: 2px solid var(--hud); box-shadow: 0 0 18px rgba(var(--h-rgb), 0.5), inset 0 0 14px rgba(var(--h-rgb), 0.35);
+  outline: 1px dashed var(--hud-dim); outline-offset: 4px; color: var(--hud-strong);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .level-badge small { text-transform: uppercase; letter-spacing: 0.14em; }
+
+/* ── Gráficas */
+html:is([data-theme="hud"], [data-theme="gold"]) .axis { fill: var(--muted); font-family: var(--font-num); }
+html:is([data-theme="hud"], [data-theme="gold"]) .chart .grid { stroke: rgba(var(--h-rgb), 0.12); stroke-dasharray: 2 4; }
+html:is([data-theme="hud"], [data-theme="gold"]) .chart .line { filter: drop-shadow(0 0 4px rgba(var(--h-rgb), 0.7)); }
+html:is([data-theme="hud"], [data-theme="gold"]) .chart .bar rect:first-child { fill-opacity: 0.38; stroke: rgba(var(--h2-rgb), 0.95); stroke-width: 1; filter: drop-shadow(0 0 5px rgba(var(--h-rgb), 0.45)); }
+html:is([data-theme="hud"], [data-theme="gold"]) .chart .bar.highlight rect:first-child { stroke: var(--amber); fill-opacity: 0.5; }
+html:is([data-theme="hud"], [data-theme="gold"]) .chart .value { fill: var(--hud-strong); font-family: var(--font-num); }
+html:is([data-theme="hud"], [data-theme="gold"]) .chart .goal-line { stroke: var(--good); filter: drop-shadow(0 0 3px var(--good)); }
+html:is([data-theme="hud"], [data-theme="gold"]) .heatmap .cell { fill: rgba(var(--h-rgb), 0.07); rx: 1; }
+html:is([data-theme="hud"], [data-theme="gold"]) .heatmap .cell.zero { fill: rgba(var(--bad-rgb), 0.16); }
+html:is([data-theme="hud"], [data-theme="gold"]) .heatmap .cell[style] { filter: drop-shadow(0 0 2px rgba(var(--h-rgb), 0.55)); }
+html:is([data-theme="hud"], [data-theme="gold"]) .heatmap .cell.today { stroke: var(--amber); }
+
+/* ── Finanzas */
+html:is([data-theme="hud"], [data-theme="gold"]) .tx-icon { border-radius: 3px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--hud)) 40%, transparent); }
+html:is([data-theme="hud"], [data-theme="gold"]) .acc-chip,
+html:is([data-theme="hud"], [data-theme="gold"]) .payday { border-radius: 3px; }
+html:is([data-theme="hud"], [data-theme="gold"]) .acc-chip { background: rgba(var(--deep-rgb), 0.6); border-color: var(--hud-dim); }
+html:is([data-theme="hud"], [data-theme="gold"]) .payday { border-color: rgba(var(--good-rgb), 0.45); box-shadow: 0 0 16px rgba(var(--good-rgb), 0.12); }
+html:is([data-theme="hud"], [data-theme="gold"]) .big-add { letter-spacing: 0.18em; }
+
+/* ── Hojas, avisos y tooltips */
+html:is([data-theme="hud"], [data-theme="gold"]) .sheet-backdrop { background: rgba(var(--bg-rgb), 0.7); }
+html:is([data-theme="hud"], [data-theme="gold"]) .sheet {
+  background: linear-gradient(180deg, rgba(var(--deep-rgb), 0.97), rgba(var(--bg-rgb), 0.98));
+  border: 1px solid var(--hud-dim); border-bottom: 0; box-shadow: 0 -10px 40px rgba(var(--h-rgb), 0.12);
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .toast {
+  background: rgba(var(--deep-rgb), 0.95); color: var(--text); border: 1px solid var(--hud-dim); border-radius: 3px;
+  box-shadow: var(--glow); font-family: var(--font-num); font-size: 0.85rem;
+}
+html:is([data-theme="hud"], [data-theme="gold"]) .toast.good { border-left: 3px solid var(--good); }
+html:is([data-theme="hud"], [data-theme="gold"]) .toast.level { background: rgba(var(--h-rgb), 0.2); color: #fff; border-color: var(--hud); text-transform: uppercase; letter-spacing: 0.2em; }
+html:is([data-theme="hud"], [data-theme="gold"]) .tooltip { background: rgba(var(--bg-rgb), 0.95); color: var(--text); border: 1px solid var(--hud); border-radius: 2px; box-shadow: var(--glow); font-family: var(--font-num); }
+
+/* ── Entrada al cambiar de vista (app.js añade main.enter solo en cambios de ruta) */
+html:is([data-theme="hud"], [data-theme="gold"]) main.enter .view > * { animation: hud-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+html:is([data-theme="hud"], [data-theme="gold"]) main.enter .view > *:nth-child(2) { animation-delay: 0.05s; }
+html:is([data-theme="hud"], [data-theme="gold"]) main.enter .view > *:nth-child(3) { animation-delay: 0.1s; }
+html:is([data-theme="hud"], [data-theme="gold"]) main.enter .view > *:nth-child(4) { animation-delay: 0.15s; }
+html:is([data-theme="hud"], [data-theme="gold"]) main.enter .view > *:nth-child(5) { animation-delay: 0.2s; }
+html:is([data-theme="hud"], [data-theme="gold"]) main.enter .view > *:nth-child(n + 6) { animation-delay: 0.25s; }
+@keyframes hud-in {
+  0% { opacity: 0; transform: translateY(8px); filter: brightness(2) saturate(0.4); clip-path: inset(0 0 100% 0); }
+  60% { opacity: 1; filter: brightness(1.4); clip-path: inset(0 0 0 0); }
+  100% { opacity: 1; transform: none; filter: none; clip-path: inset(0 0 0 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:is([data-theme="hud"], [data-theme="gold"]) body::after { animation: none; }
+}

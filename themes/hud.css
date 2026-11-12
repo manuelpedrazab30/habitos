@@ -1,0 +1,25 @@
+/* Tema "HUD" (versión A): cian holográfico. La base visual está en themes/holo.css;
+   aquí solo van sus colores y tipografías. */
+
+html[data-theme="hud"] {
+  --h-rgb: 63, 208, 255;          /* cian principal */
+  --h2-rgb: 143, 230, 255;        /* cian claro */
+  --glow-rgb: 0, 170, 255;
+  --warm-rgb: 255, 160, 0;
+  --amber-rgb: 255, 176, 32;      /* acento cálido, como el arco naranja */
+  --good-rgb: 46, 242, 194;
+  --bad-rgb: 255, 77, 106;
+  --warn: #ffb020;
+  --bg: #02070c;
+  --bg-rgb: 2, 7, 12;
+  --deep-rgb: 4, 16, 26;
+  --panel-top: rgba(10, 40, 60, 0.55);
+  --surface: rgba(8, 28, 42, 0.62);
+  --text: #d6f4ff;
+  --muted: #6f9db3;
+  --on-fill: #021018;
+  --on-primary: #eafaff;
+  --insight: #a78bfa;
+  /* Tipografía: Space Grotesk, definida en holo.css (común a A y B) */
+  --confetti: #3fd0ff, #8fe6ff, #2ef2c2, #ffb020, #ffffff;
+}

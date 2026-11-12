@@ -82,6 +82,14 @@ sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPho
 - `monthSummary` compara con el mes anterior **hasta el mismo día del mes**; los presupuestos son mensuales por categoría (aviso al 80%). `financeMessages` sigue la misma regla que los hábitos: cifras concretas, nada genérico.
 - Rutas: `#/finanzas`, `#/finanzas/movimientos`, `#/finanzas/cuentas`, `#/finanzas/nuevo`. La sección activa se recuerda (`localStorage['panel.section']`) para abrir la app donde se dejó.
 
+### Datos y copias de seguridad (`src/backup.js`, Ajustes)
+- Los datos viven solo en el `localStorage` de cada dispositivo (la app instalada en iOS tiene el suyo, aparte del de Safari). Nunca van al repo (es público) ni a ningún servidor.
+- Al arrancar, `requestPersistentStorage()` pide `navigator.storage.persist()` para que el sistema no borre los datos por falta de espacio; Ajustes muestra si está concedido.
+- **Copia cifrada**: `encryptBackup` cifra `store.exportJson()` en el dispositivo con AES-256-GCM y clave PBKDF2-SHA-256 (600 000 iteraciones, sal e IV aleatorios en cada copia) → JSON `{ format: 'panel-backup', version: 1, kdf, cipher, data }`. `decryptBackup` falla con un mensaje claro si la contraseña es incorrecta o el archivo está alterado (GCM autentica). La contraseña no se guarda nunca; los campos usan `autocomplete` (`new-password`/`current-password` + usuario oculto "Copia de Panel") para que el llavero de iOS la guarde.
+- Guardar el archivo (`saveFile`): hoja de Compartir del sistema (`navigator.share` con `files`; en iPhone → Guardar en Archivos → iCloud Drive) o descarga si no hay. El cifrado y el compartir van en **dos toques**: iOS exige un gesto directo para `share()` y el cifrado es asíncrono.
+- WebCrypto solo existe en contexto seguro (HTTPS o localhost): por HTTP en la red local la copia cifrada no está disponible (Ajustes lo avisa).
+- Restaurar acepta copias cifradas (pide contraseña) y exportaciones JSON sin cifrar; siempre muestra un resumen y se puede deshacer. `localStorage['panel.lastBackup']` guarda la fecha de la última copia; `backupOverdue` (hay datos y nunca, o ≥ 7 días) pone un punto en Ajustes (barra de Hábitos) y en el ⚙ de Finanzas.
+
 ### Principio clave: todo lo derivado se calcula, nunca se guarda
 Rachas, XP, niveles, estadísticas y mensajes se recalculan desde `entries` en cada render. Así, deshacer un registro o rellenar días pasados deja todo coherente sin contadores que sincronizar. No persistas XP ni rachas.
 
@@ -96,6 +104,14 @@ Los días son claves locales `'YYYY-MM-DD'`, comparables como strings. Usa siemp
 - Proyecciones (`stats.js`): target = regresión lineal sobre las mediciones de los últimos 42 días; meta de total = media diaria de los últimos 14 días.
 - Metas de duración (`durationProgress` en `stats.js`): cada periodo (semana en hábitos semanales, día programado en el resto) es cumplido, fallado (pasado sin cumplir) o restante (el actual y los futuros). La meta se logra con `DURATION_SUCCESS` (80 %) de periodos cumplidos, aunque no haya terminado el plazo. Los mensajes dicen cuántos periodos faltan y cuánto margen de fallo queda.
 - `messages.js` genera mensajes `{kind, priority, text}`; la vista Hoy muestra los 3 de mayor prioridad. Un mensaje nuevo debe citar una cifra concreta (distancia, fecha, ritmo necesario vs. actual).
+
+### Temas visuales (`src/ui/theme.js`, `themes/`)
+- El tema activo va en `html[data-theme]`: `classic` (= `styles.css` tal cual), `hud` (versión A, cian) y `gold` (versión B, dorado). Todas las hojas de `themes/` se cargan siempre desde `index.html` y cada regla va bajo su `html[data-theme="…"]`, así que sin el atributo no afectan a nada.
+- Tipografía de A y B: **Space Grotesk** (SIL OFL 1.1), incluida en `fonts/space-grotesk-latin.woff2` (variable 300–700, subconjunto latino) con su licencia en `fonts/OFL-SpaceGrotesk.txt`; el `@font-face` está en `holo.css`. Nada se carga de Google Fonts en tiempo de ejecución (funciona sin conexión). El tema clásico sigue con la fuente del sistema.
+- `themes/holo.css` es la base común de A y B (paneles con esquinas, escaneo, anillos, animación de entrada) y **no lleva colores fijos**: usa variables (`--h-rgb`, `--h2-rgb`, `--amber-rgb`, `--panel-top`, `--font-head`, `--font-num`…) que define cada tema en `hud.css` / `gold.css`. Un tema holográfico nuevo = otra hoja de variables + añadirlo al `:is(...)` de `holo.css`.
+- Un script en línea en `index.html` aplica el tema guardado (`localStorage['panel.theme']`) antes de pintar, y acepta `?theme=classic|hud|gold`. Se elige en Ajustes → "Estilo visual" (`THEMES`, `applyTheme`). Un tema nuevo: su hoja, su `<link>`, su entrada en `THEMES` (y el color en el script de `index.html`) y su ruta en `SHELL` de `sw.js`.
+- `THEMES[].symbols` (solo `gold`): `src/ui/symbols.js` sustituye los emojis por iconos de línea SVG en el color del tema mediante un `MutationObserver` sobre `<body>` (mapa emoji → icono; sin icono propio, silueta del emoji; en `<option>` se quitan). Al cambiar de tema se restauran desde `data-emoji`. Si añades emojis nuevos a la app, añade su icono a `MAP`/`ICONS`. Cuidado con regex `g` + `test()`: deja `lastIndex` movido (se usa `HAS` sin `g` para comprobar).
+- Los temas redefinen las variables de `:root` (`--accent`, `--surface`…); las gráficas leen `var(--accent)` en línea, así que cambian solas. `gold.css` además lleva los colores de hábitos/categorías (`--c` en línea) a la gama dorada con selectores `[style*="--c: #…"]` + `!important`. El confeti usa `--confetti` si el tema la define. `app.js` pone `main.enter` ~0,9 s en cada cambio de ruta: úsalo para animaciones de entrada (no en cada re-render).
 
 ### UI
 - Sin framework. `ui/dom.js` aporta `h()` (HTML), `s()` (SVG), `toast()` y un tooltip compartido. `h()` ignora hijos `null`/`false`; `element.replaceChildren()` **no**, así que filtra antes.
