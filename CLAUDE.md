@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Qué es
 
-App web de seguimiento de hábitos (UI en español). Objetivos de producto que guían las decisiones:
-- **Mínima fricción**: registrar un hábito es un toque desde la vista "Hoy"; sin cuentas ni backend.
+Panel personal (UI en español) con dos secciones: **Hábitos** (el seguimiento de hábitos original) y **Finanzas**. Se cambia de sección con el selector de la barra superior; cada sección tiene su propia barra de navegación inferior. Objetivos de producto que guían las decisiones:
+- **Mínima fricción**: registrar un hábito es un toque desde la vista "Hoy"; registrar un gasto es importe → categoría → Guardar. Sin cuentas ni backend.
 - **Gamificación basada en datos**: rachas, XP/niveles y mensajes de motivación que siempre dicen una distancia concreta ("te faltan 2,4 kg; a tu ritmo llegas el 25 dic, 31 días antes del plazo"). Nada de frases genéricas o cliché.
 - **Visualización para detectar áreas de mejora**: mapas de calor, cumplimiento por día de la semana, hábitos que más han caído, proyección hacia la meta.
 
@@ -37,7 +37,8 @@ src/domain/   lógica pura, sin DOM (todo lo testeable vive aquí)
 src/store.js  estado único + persistencia en localStorage
 src/ui/       vistas: funciones (state, ctx) → elemento DOM
 src/app.js    arranque, router por hash, feedback de gamificación (toasts de XP/récord/nivel)
-src/demo.js   datos de ejemplo (botón en el estado vacío)
+src/ui/finance/  sección de finanzas: overview (resumen + alta inicial), transactions, accounts, entrySheet
+src/demo.js   datos de ejemplo: demoState (hábitos) y demoFinance (finanzas), cada uno sin tocar la otra sección
 sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPhone/Android)
 ```
 
@@ -58,7 +59,7 @@ sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPho
   - `count`: `{ total, deadline }` (cantidad acumulada).
   - `target`: `{ start, value, deadline }`.
 - `createHabit()` es el normalizador único: lo usan el formulario, `updateHabit`, la importación y `migrate()`. Si añades un campo, añádelo ahí.
-- Cambios de esquema: subir `VERSION` y añadir un paso en `migrate()` en `store.js`. v2 eliminó `goal.total` de los hábitos `check`; v3 añadió la rutina y `state.workouts`; v4 dividió la rutina en `habit.sessions` (la lista única de v3 se copia a cada sesión) y cada registro pasó a `{ sessionId, items }`.
+- Cambios de esquema: subir `VERSION` y añadir un paso en `migrate()` en `store.js`. v5 añadió `state.finance`. v2 eliminó `goal.total` de los hábitos `check`; v3 añadió la rutina y `state.workouts`; v4 dividió la rutina en `habit.sessions` (la lista única de v3 se copia a cada sesión) y cada registro pasó a `{ sessionId, items }`.
 
 ### Entrenamiento y sobrecarga progresiva (`domain/workouts.js`)
 - Un hábito `check` puede tener una rutina dividida en **sesiones**: `sessions: [{ id, name, exercises: [{ id, name, sets, reps, weight }] }]` (`reps` = objetivo por serie; `[]` = sin rutina). Hay exactamente `sessionCount(schedule)` plantillas, una por entrenamiento de la semana: N por semana → N ("Día A, B, C…", en rotación); días concretos → una por día; diario → 7. `normalizeSessions` (vía `createHabit`) rellena o recorta al cambiar el calendario y pone nombres por defecto; el formulario hace lo mismo en vivo con `fitSessions()` sin borrar filas a medio escribir.
@@ -69,6 +70,17 @@ sw.js, manifest.webmanifest, icons/   PWA instalable (pantalla de inicio de iPho
 - En hábitos con rutina (`hasRoutine`), marcar el día (Hoy, tira semanal o historial) abre `ui/workoutSheet.js` en lugar de alternar. Cada ejercicio se precarga con lo registrado ese día, si no con la última vez que se hizo (en cualquier sesión), si no con el plan (`prefillSession`); repetir es un toque.
 - XP: +`PR_XP` por cada récord de peso (`prCount`, sin contar la primera sesión de cada ejercicio). `ctx.logWorkout()` anuncia los récords nuevos.
 - `overloadMessages` genera los mensajes: qué ejercicios subir y a cuántos kg, estancamientos, récords recientes y la mayor subida en 4 semanas.
+
+### Finanzas (`domain/finance.js`, `ui/finance/`)
+- `state.finance = { currency, since, accounts, categories, paydays, fixedCosts, transactions }` (ver la cabecera de `finance.js`). **Importes siempre en céntimos enteros**; `parseAmount` entiende "12,50", "12.5", "1.234,56"; `formatMoney` formatea con `Intl`.
+- Todo cambio de finanzas es una función pura (`saveTransaction`, `deleteTransaction`, `saveAccount`, `saveCategory`, `savePaydays`, `saveFixedCost`…) que devuelve un `finance` nuevo; la UI lo guarda con `ctx.saveFinance(next, mensaje)` (→ `store.setFinance`, con "Deshacer"). No mutes `state.finance`.
+- Tipos de movimiento: `expense` (con `categoryId`), `income` y `transfer` (`toAccountId`). Los saldos se derivan (`accountBalances` = saldo inicial ± movimientos); las transferencias no cuentan como gasto ni ingreso. Cuentas y categorías con movimientos no se pueden borrar.
+- **Cobros fijos** (`paydays`, por defecto días 1 y 15): definen los periodos (del 1 al 14, del 15 a fin de mes; días > fin de mes se recortan). `periodSummary` da lo ingresado − gastado en el periodo y cuánto queda al día hasta el siguiente cobro. `pendingPaydays` lista cobros sin registrar (desde `since`, máx. 45 días): el resumen los ofrece con un botón "Registrar" (ingreso con `paydayId`). En el alta, `since` = inicio del periodo actual, para pedir el cobro que lo abrió.
+- **Gastos fijos** (`fixedCosts`: alquiler, suscripciones…; mensuales o anuales con `month`): se definen en Cuentas (`fixedCostSheet`, que sugiere categoría por el nombre). Nunca se pagan solos: el pago es un gasto normal con `fixedCostId` (`fixedCostPayment`; en la fecha de vencimiento, o hoy si se paga antes). Un vencimiento cuenta como pagado si hay un gasto con su `fixedCostId` a ±10 días (`fixedPayment`), así que pagar antes o con otro importe funciona. Solo hay vencimientos desde el `createdAt` de cada gasto fijo (no se piden meses anteriores al alta).
+- `periodSummary` descuenta los fijos del periodo aún sin pagar: `left` (ingresado − gastado), `committed` (fijos pendientes), `free` (`left − committed`) y `perDay` sobre `free`. El resumen muestra `free` como "para gastar"; los vencidos sin pagar salen como tarjeta con "Pagado" (`pendingFixedCosts`) y los de los próximos 3 días como mensaje.
+- Registro rápido (`ui/finance/entrySheet.js`, `ctx.openEntry()`, botón "＋ Gasto" de la barra, tecla `g`, ruta `#/finanzas/nuevo`): el importe tiene el foco al abrir (teclado numérico en iOS), la cuenta viene preseleccionada (`lastAccountId`), las categorías van por uso (`categoriesByUse`) y "Repetir" rellena un gasto reciente (`recentExpenses`).
+- `monthSummary` compara con el mes anterior **hasta el mismo día del mes**; los presupuestos son mensuales por categoría (aviso al 80%). `financeMessages` sigue la misma regla que los hábitos: cifras concretas, nada genérico.
+- Rutas: `#/finanzas`, `#/finanzas/movimientos`, `#/finanzas/cuentas`, `#/finanzas/nuevo`. La sección activa se recuerda (`localStorage['panel.section']`) para abrir la app donde se dejó.
 
 ### Principio clave: todo lo derivado se calcula, nunca se guarda
 Rachas, XP, niveles, estadísticas y mensajes se recalculan desde `entries` en cada render. Así, deshacer un registro o rellenar días pasados deja todo coherente sin contadores que sincronizar. No persistas XP ni rachas.
@@ -91,5 +103,6 @@ Los días son claves locales `'YYYY-MM-DD'`, comparables como strings. Usa siemp
 - Cada cambio del store re-renderiza la vista activa entera (salvo si hay un `form.habit-form` en pantalla, para no perder lo que el usuario escribe). El estado efímero de UI (día seleccionado en Hoy, rangos de gráficas, editor de día abierto) vive en `ctx.ui` en `app.js`.
 - Todo registro debe pasar por `ctx.logEntry()` / `ctx.logWorkout()` (ambos usan `withFeedback` en `app.js`), no por el store directamente: calculan la XP ganada, detectan récords (de racha y de peso) y subidas de nivel y ofrecen "Deshacer".
 - Modales: `ui/sheet.js` (`openSheet`) monta la hoja en `<body>`, fuera de `#view`, así que sobrevive a los re-render; se cierra con el fondo, Escape o al cambiar de ruta. `element.append()` tampoco ignora `null`: filtra antes.
-- Rutas: `#/` (Hoy), `#/progreso`, `#/nuevo[?t=índice de plantilla]`, `#/editar/:id`, `#/habito/:id`, `#/ajustes`. Atajos de teclado: `h`, `p`, `n`.
+- Rutas: `#/` (Hoy), `#/progreso`, `#/nuevo[?t=índice de plantilla]`, `#/editar/:id`, `#/habito/:id`, `#/ajustes` (+ las de finanzas). Atajos de teclado: `h`, `p`, `n`, `f` (finanzas), `g` (nuevo gasto).
+- La barra superior (`#sections`, `#level`) y la inferior (`#nav`) las pinta `app.js` (`renderNav`/`renderHeader`) según la sección; `index.html` solo tiene los contenedores.
 - Gráficas SVG hechas a mano en `ui/charts.js` (`heatmap`, `lineChart`, `barChart`, `ring`). No añadas librerías de gráficas: el proyecto evita dependencias y pasos de build.

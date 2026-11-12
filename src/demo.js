@@ -1,5 +1,6 @@
 import { addDays, diffDays, weekday } from './domain/dates.js';
 import { createHabit } from './domain/habits.js';
+import { normalizeFinance, DEFAULT_CATEGORIES, paydayDates } from './domain/finance.js';
 
 // Datos de ejemplo (~100 días) para explorar las gráficas sin esperar semanas.
 // Pseudoaleatorio con semilla para que sea reproducible.
@@ -72,4 +73,68 @@ export function demoState(today) {
     workouts['demo-gym'][k] = { sessionId, items };
   });
   return { version: 4, habits, entries, workouts, settings: { demo: true } };
+}
+
+/**
+ * Finanzas de ejemplo (~100 días): cobros el 1 y el 15, gastos diarios variados, alquiler,
+ * suscripciones y el pago mensual de la tarjeta. Restaurantes va alto este mes para que
+ * se vea el aviso de presupuesto.
+ */
+export function demoFinance(today) {
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const between = (a, b) => Math.round((a + rnd() * (b - a)) * 100); // céntimos
+  const start = addDays(today, -100);
+  const accounts = [
+    { id: 'demo-bank', name: 'Cuenta corriente', emoji: '🏦', initial: 180000 },
+    { id: 'demo-card', name: 'Tarjeta de crédito', emoji: '💳', initial: 0 },
+    { id: 'demo-cash', name: 'Efectivo', emoji: '💵', initial: 8000 },
+  ];
+  const budgets = { 'cat-food': 20000, 'cat-fun': 12000, 'cat-super': 35000 };
+  const categories = DEFAULT_CATEGORIES.map((c) => ({ ...c, budget: budgets[c.id] ?? null }));
+  const paydays = [{ id: 'demo-pay1', day: 1, amount: 160000, accountId: 'demo-bank' }, { id: 'demo-pay15', day: 15, amount: 110000, accountId: 'demo-bank' }];
+  const tx = [];
+  const add = (t) => tx.push({ id: `demo-tx-${tx.length}`, note: '', ...t });
+  const fin0 = normalizeFinance({ paydays }, today);
+
+  for (const { key, payday } of paydayDates(fin0, start, today)) {
+    add({ type: 'income', amount: payday.amount, date: key, accountId: 'demo-bank', paydayId: payday.id, note: 'Nómina' });
+  }
+  const thisMonth = today.slice(0, 7);
+  for (let k = start; k <= today; k = addDays(k, 1)) {
+    const d = Number(k.slice(8));
+    const wd = weekday(k);
+    const card = rnd() < 0.7 ? 'demo-card' : 'demo-bank';
+    if (d === 1) add({ type: 'expense', amount: 75000, date: k, accountId: 'demo-bank', categoryId: 'cat-home', note: 'Alquiler', fixedCostId: 'demo-fx-rent' });
+    if (d === 5) add({ type: 'expense', amount: 1299, date: k, accountId: 'demo-card', categoryId: 'cat-subs', note: 'Streaming', fixedCostId: 'demo-fx-stream' });
+    if (d === 13 && k < today) add({ type: 'expense', amount: 3500, date: k, accountId: 'demo-card', categoryId: 'cat-health', note: 'Gimnasio', fixedCostId: 'demo-fx-gym' });
+    if (d === 8) add({ type: 'expense', amount: between(45, 75), date: k, accountId: 'demo-bank', categoryId: 'cat-bills', note: 'Luz' });
+    if (d === 20) add({ type: 'expense', amount: 3500, date: k, accountId: 'demo-bank', categoryId: 'cat-bills', note: 'Internet', fixedCostId: 'demo-fx-net' });
+    if (d === 3) { // la tarjeta se liquida con lo gastado en ella el mes anterior
+      const prevMonth = toKeyMonth(addDays(k, -5));
+      const owed = tx.filter((t) => t.accountId === 'demo-card' && t.type === 'expense' && t.date.startsWith(prevMonth)).reduce((a, t) => a + t.amount, 0);
+      if (owed) add({ type: 'transfer', amount: owed, date: k, accountId: 'demo-bank', toAccountId: 'demo-card', note: 'Pago tarjeta' });
+    }
+    if (d === 10) add({ type: 'transfer', amount: 6000, date: k, accountId: 'demo-bank', toAccountId: 'demo-cash', note: 'Cajero' });
+    if ((wd === 1 || wd === 5) && rnd() < 0.9) add({ type: 'expense', amount: between(25, 85), date: k, accountId: card, categoryId: 'cat-super' });
+    const restaurantP = k.startsWith(thisMonth) ? 0.6 : 0.35;
+    if (rnd() < restaurantP) add({ type: 'expense', amount: between(9, 38), date: k, accountId: card, categoryId: 'cat-food' });
+    if (wd < 5 && rnd() < 0.5) add({ type: 'expense', amount: between(1.5, 3.2), date: k, accountId: 'demo-cash', categoryId: 'cat-food', note: 'Café' });
+    if (rnd() < 0.25) add({ type: 'expense', amount: between(2, 45), date: k, accountId: card, categoryId: 'cat-transport', note: rnd() < 0.4 ? 'Gasolina' : '' });
+    if (wd >= 5 && rnd() < 0.45) add({ type: 'expense', amount: between(10, 60), date: k, accountId: card, categoryId: 'cat-fun' });
+    if (rnd() < 0.08) add({ type: 'expense', amount: between(15, 120), date: k, accountId: card, categoryId: 'cat-shop' });
+    if (rnd() < 0.04) add({ type: 'expense', amount: between(8, 60), date: k, accountId: card, categoryId: 'cat-health', note: 'Farmacia' });
+  }
+  const fixedCosts = [
+    { id: 'demo-fx-rent', name: 'Alquiler', amount: 75000, day: 1, categoryId: 'cat-home', accountId: 'demo-bank', createdAt: start },
+    { id: 'demo-fx-stream', name: 'Streaming', amount: 1299, day: 5, categoryId: 'cat-subs', accountId: 'demo-card', createdAt: start },
+    { id: 'demo-fx-gym', name: 'Gimnasio', amount: 3500, day: 13, categoryId: 'cat-health', accountId: 'demo-card', createdAt: start },
+    { id: 'demo-fx-net', name: 'Internet', amount: 3500, day: 20, categoryId: 'cat-bills', accountId: 'demo-bank', createdAt: start },
+    { id: 'demo-fx-car', name: 'Seguro del coche', amount: 38000, day: 20, frequency: 'yearly', month: Number(addDays(today, 40).slice(5, 7)), categoryId: 'cat-transport', accountId: 'demo-bank', createdAt: start },
+  ];
+  return normalizeFinance({ currency: 'EUR', since: start, accounts, categories, paydays, fixedCosts, transactions: tx }, today);
+}
+
+function toKeyMonth(key) {
+  return key.slice(0, 7);
 }

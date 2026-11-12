@@ -5,12 +5,19 @@ import { computeStreak, streakLabel } from './domain/streaks.js';
 import { demoState } from './demo.js';
 import { allExercises, bestWeights, normName } from './domain/workouts.js';
 import { fmt } from './domain/messages.js';
+import { isDone } from './domain/habits.js';
 import { h, hideTip, toast } from './ui/dom.js';
+import { confetti } from './ui/confetti.js';
 import { todayView } from './ui/today.js';
 import { habitFormView } from './ui/habitForm.js';
 import { habitDetailView } from './ui/habitDetail.js';
 import { progressView } from './ui/progress.js';
 import { settingsView } from './ui/settings.js';
+import { financeOverviewView } from './ui/finance/overview.js';
+import { transactionsView } from './ui/finance/transactions.js';
+import { accountsView } from './ui/finance/accounts.js';
+import { openEntrySheet } from './ui/finance/entrySheet.js';
+import { demoFinance } from './demo.js';
 
 // Arranque, router por hash y feedback de gamificación.
 // Cada cambio en el store vuelve a renderizar la vista activa entera (las vistas son
@@ -19,10 +26,13 @@ import { settingsView } from './ui/settings.js';
 const store = createStore();
 const main = document.getElementById('view');
 const header = document.getElementById('level');
+const nav = document.getElementById('nav');
+const sections = document.getElementById('sections');
+const SECTION_KEY = 'panel.section';
 
 const ctx = {
   store,
-  ui: { day: null, range: '3m', lineRange: '3m', editKey: null },
+  ui: { day: null, range: '3m', lineRange: '3m', editKey: null, month: null, txFilter: null },
   today: () => todayKey(),
   go(hash) {
     if (location.hash === hash) render();
@@ -30,24 +40,40 @@ const ctx = {
   },
   rerender: () => render(),
   loadDemo() {
-    store.importJson(JSON.stringify(demoState(todayKey())));
+    // Solo hábitos: conserva las finanzas que ya hubiera
+    store.importJson(JSON.stringify({ ...demoState(todayKey()), finance: store.get().finance }));
     toast('Datos de ejemplo cargados. Bórralos en Ajustes cuando quieras.', { timeout: 5000 });
+  },
+  loadFinanceDemo() {
+    store.setFinance(demoFinance(todayKey()));
+    toast('Finanzas de ejemplo cargadas. Bórralas en Cuentas cuando quieras.', { timeout: 5000 });
+  },
+
+  /** Finanzas: guarda un `finance` nuevo (de las funciones puras) con aviso y "Deshacer". */
+  saveFinance(next, message) {
+    store.setFinance(next);
+    if (message) toast(message, { tone: 'good', action: 'Deshacer', onAction: () => store.undo() });
+  },
+  /** Hoja de registro rápido. opts: { type, tx } (tx = editar un movimiento). */
+  openEntry(opts = {}) {
+    openEntrySheet(ctx, opts);
   },
 
   /** Registrar un valor con feedback (XP, récords, nivel, deshacer). Todo registro pasa por aquí. */
   logEntry(habit, key, value) {
-    withFeedback(habit, () => store.setEntry(habit.id, key, value));
+    withFeedback(habit, key, () => store.setEntry(habit.id, key, value));
   },
 
   /** Guardar una sesión de entrenamiento (marca el día como hecho) con el mismo feedback. */
   logWorkout(habit, key, items, sessionId) {
-    withFeedback(habit, () => store.setWorkout(habit.id, key, items, sessionId), { saved: 'Sesión guardada' });
+    withFeedback(habit, key, () => store.setWorkout(habit.id, key, items, sessionId), { saved: 'Sesión guardada' });
   },
 };
 
-function withFeedback(habit, mutate, { saved = null } = {}) {
+function withFeedback(habit, key, mutate, { saved = null } = {}) {
   const today = todayKey();
   const before = store.get();
+  const doneBefore = isDone(habit, before.entries[habit.id]?.[key]);
   const xpBefore = totalXp(before, today);
   const streakBefore = computeStreak(habit, before.entries[habit.id], today);
   const bestBefore = bestWeights(before.workouts?.[habit.id]);
@@ -64,6 +90,12 @@ function withFeedback(habit, mutate, { saved = null } = {}) {
     const k = normName(ex.name);
     return k in bestBefore && bestAfter[k] > bestBefore[k];
   });
+
+  // Confeti solo cuando el día pasa de no cumplido a cumplido (no al subir un contador
+  // ya cumplido ni al editar una medición existente).
+  if (!doneBefore && isDone(habit, after.entries[habit.id]?.[key])) {
+    requestAnimationFrame(() => confetti({ origin: document.querySelector(`[data-habit="${habit.id}"]`), color: habit.color }));
+  }
 
   if (gained > 0) {
     celebrate(habit.id);
@@ -95,6 +127,10 @@ function celebrate(habitId) {
 
 const routes = [
   [/^#\/?$/, (st) => todayView(st, ctx)],
+  [/^#\/finanzas$/, (st) => financeOverviewView(st, ctx)],
+  [/^#\/finanzas\/nuevo$/, (st) => { setTimeout(() => ctx.openEntry(), 0); return financeOverviewView(st, ctx); }],
+  [/^#\/finanzas\/movimientos$/, (st) => transactionsView(st, ctx)],
+  [/^#\/finanzas\/cuentas$/, (st) => accountsView(st, ctx)],
   [/^#\/progreso$/, (st) => progressView(st, ctx)],
   [/^#\/nuevo$/, (st, m, params) => habitFormView(st, ctx, null, params)],
   [/^#\/editar\/([^/?]+)$/, (st, m, params) => habitFormView(st, ctx, m[1], params)],
@@ -112,10 +148,35 @@ function render() {
   main.replaceChildren(route[1](state, path.match(route[0]), params));
   window.scrollTo(0, scrollY);
   renderHeader(state);
-  document.querySelectorAll('.nav a').forEach((a) => a.classList.toggle('on', a.getAttribute('href') === path || (path === '#' && a.getAttribute('href') === '#/')));
+  renderNav(path);
+}
+
+// ── Panel: dos secciones con su propia navegación inferior
+const NAVS = {
+  habitos: [['#/', '◎', 'Hoy'], ['#/progreso', '▤', 'Progreso'], ['#/nuevo', '＋', 'Nuevo', 'add'], ['#/ajustes', '⚙', 'Ajustes']],
+  finanzas: [['#/finanzas', '◔', 'Resumen'], ['#/finanzas/movimientos', '≡', 'Movimientos'], ['gasto', '＋', 'Gasto', 'add'], ['#/finanzas/cuentas', '▣', 'Cuentas']],
+};
+const sectionOf = (path) => (path.startsWith('#/finanzas') ? 'finanzas' : 'habitos');
+
+function renderNav(path) {
+  const section = sectionOf(path);
+  localStorage.setItem(SECTION_KEY, section);
+  document.body.dataset.section = section;
+  sections.replaceChildren(
+    h('a', { href: '#/', class: section === 'habitos' ? 'on' : '' }, 'Hábitos'),
+    h('a', { href: '#/finanzas', class: section === 'finanzas' ? 'on' : '' }, 'Finanzas'),
+  );
+  const current = path === '#' || path === '' ? '#/' : path === '#/finanzas/nuevo' ? '#/finanzas' : path;
+  nav.replaceChildren(...NAVS[section].map(([href, icon, label, cls]) => (href === 'gasto'
+    ? h('button', { type: 'button', class: `nav-item ${cls || ''}`, onClick: () => ctx.openEntry() }, h('span', { 'aria-hidden': 'true' }, icon), label)
+    : h('a', { href, class: `nav-item ${cls || ''} ${href === current ? 'on' : ''}` }, h('span', { 'aria-hidden': 'true' }, icon), label))));
 }
 
 function renderHeader(state) {
+  if (sectionOf((location.hash || '#/').split('?')[0]) === 'finanzas') {
+    header.replaceChildren(h('a', { href: '#/ajustes', class: 'icon-link', 'aria-label': 'Ajustes', title: 'Ajustes (exportar, importar)' }, '⚙'));
+    return;
+  }
   const lv = levelInfo(totalXp(state, todayKey()));
   header.replaceChildren(
     h('a', { href: '#/progreso', class: 'level-chip', title: `${lv.xp} XP · faltan ${lv.toNext} para el nivel ${lv.level + 1}` },
@@ -173,6 +234,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'n') ctx.go('#/nuevo');
   if (e.key === 'h') ctx.go('#/');
   if (e.key === 'p') ctx.go('#/progreso');
+  if (e.key === 'f') ctx.go('#/finanzas');
+  if (e.key === 'g') { e.preventDefault(); ctx.openEntry(); }
 });
 
+// Al abrir la app sin ruta, vuelve a la última sección usada
+if (!location.hash && localStorage.getItem(SECTION_KEY) === 'finanzas') location.replace('#/finanzas');
 render();

@@ -70,7 +70,7 @@ test('store: migra v3 (rutina única y sesiones como array) a v4', () => {
     workouts: { g: { '2026-11-10': [{ exerciseId: 'sq', name: 'Sentadilla', sets: 3, reps: 8, weight: 60 }] } },
   }));
   const st = createStore(mem).get();
-  eq(st.version, 4);
+  eq(st.version, 5);
   eq(st.habits[0].sessions.length, 3);
   eq(st.habits[0].routine, undefined);
   eq(st.workouts.g['2026-11-10'], { sessionId: null, items: [{ exerciseId: 'sq', name: 'Sentadilla', sets: 3, reps: 8, weight: 60 }] });
@@ -79,5 +79,17 @@ test('store: datos v2 migran con workouts vacío', () => {
   const mem = memoryStorage();
   mem.setItem(STORAGE_KEY, JSON.stringify({ version: 2, habits: [{ name: 'A', kind: 'check' }], entries: {} }));
   const st = createStore(mem).get();
-  eq([st.version, st.workouts, st.habits[0].sessions], [4, {}, []]);
+  eq([st.version, st.workouts, st.habits[0].sessions], [5, {}, []]);
+});
+test('store: v5 añade finanzas sin tocar los hábitos y setFinance se puede deshacer', () => {
+  const mem = memoryStorage();
+  mem.setItem(STORAGE_KEY, JSON.stringify({ version: 4, habits: [{ id: 'm', name: 'Meditar', kind: 'check' }], entries: { m: { '2026-11-10': 1 } }, workouts: {} }));
+  const s = createStore(mem);
+  eq(s.get().version, 5);
+  eq([s.get().habits[0].name, s.get().entries.m['2026-11-10']], ['Meditar', 1]);
+  eq(s.get().finance.paydays.map((p) => p.day), [1, 15]);
+  s.setFinance({ ...s.get().finance, currency: 'USD' });
+  eq(createStore(mem).get().finance.currency, 'USD', 'persistido');
+  s.undo();
+  eq(s.get().finance.currency, 'EUR');
 });

@@ -24,7 +24,9 @@ export function todayView(state, ctx) {
   const doneCount = countable.filter((x) => isDone(x, state.entries[x.id]?.[day])).length;
   const isToday = day === today;
 
-  const messages = isToday ? globalMessages(state, today).slice(0, 3) : [];
+  // Hoy solo muestra lo accionable: el nivel/XP ya está en Progreso y el estado de la
+  // semana en la tira de días de cada tarjeta
+  const messages = isToday ? globalMessages(state, today).filter((m) => m.kind !== 'level' && m.topic !== 'week').slice(0, 3) : [];
 
   return h('section', { class: 'view today' },
     h('header', { class: 'day-nav' },
@@ -170,7 +172,9 @@ function weekStrip(habit, log, day, ctx) {
       if (habit.kind !== 'check' || k > today) return h('span', { class: cls, title }, d);
       return h('button', { class: cls, title, 'aria-pressed': String(done), 'aria-label': title, onClick: () => (hasRoutine(habit) ? openWorkoutSheet(habit, k, ctx) : ctx.logEntry(habit, k, done ? null : 1)) }, d);
     }),
-    h('span', { class: `wk-count ${status.met ? 'met' : ''}` }, `${status.done}/${status.times} días${status.met ? ' ✓' : ''}`),
+    // Sin margen (hacen falta todos los días que quedan) o ya imposible: el contador se pone naranja
+    h('span', { class: `wk-count ${status.met ? 'met' : status.times - status.done >= status.daysLeft ? 'tight' : ''}` },
+      `${status.done}/${status.times} días${status.met ? ' ✓' : status.times - status.done > status.daysLeft ? ' · ya no da' : status.times - status.done === status.daysLeft ? ' · sin margen' : ''}`),
   );
 }
 

@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#6366f1">
-  <meta name="description" content="Registra tus hábitos, mira tu progreso y cumple tus metas.">
-  <title>Hábitos</title>
+  <meta name="description" content="Tu panel personal: hábitos y finanzas.">
+  <title>Panel personal</title>
 
   <!-- Instalable: pantalla de inicio de iPhone (Compartir → Añadir a pantalla de inicio) y Android -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -13,7 +13,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Hábitos">
+  <meta name="apple-mobile-web-app-title" content="Panel">
   <!-- La barra de estado se superpone; .topbar reserva env(safe-area-inset-top) -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
@@ -21,17 +21,13 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Barra superior y navegación inferior: las rellena src/app.js según la sección (Hábitos / Finanzas) -->
   <header class="topbar">
-    <a href="#/" class="brand">Hábitos</a>
+    <nav class="section-switch" id="sections" aria-label="Secciones"></nav>
     <div id="level"></div>
   </header>
   <main id="view"></main>
-  <nav class="nav" aria-label="Principal">
-    <a href="#/"><span aria-hidden="true">◎</span>Hoy</a>
-    <a href="#/progreso"><span aria-hidden="true">▤</span>Progreso</a>
-    <a href="#/nuevo" class="add"><span aria-hidden="true">＋</span>Nuevo</a>
-    <a href="#/ajustes"><span aria-hidden="true">⚙</span>Ajustes</a>
-  </nav>
+  <nav class="nav" id="nav" aria-label="Principal"></nav>
   <script type="module" src="src/app.js"></script>
 </body>
 </html>

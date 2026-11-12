@@ -125,7 +125,8 @@ export function overloadMessages(habit, workouts = {}, today) {
 export function habitMessages(habit, log = {}, today, workouts = {}) {
   const out = [];
   const name = `${habit.emoji} ${habit.name}`;
-  const push = (kind, priority, text) => out.push({ id: `${habit.id}:${kind}:${out.length}`, habitId: habit.id, kind, priority, text });
+  // topic: 'week' = estado de la semana en hábitos N/semana (Hoy no lo muestra: ya lo dice la tira de días)
+  const push = (kind, priority, text, topic = null) => out.push({ id: `${habit.id}:${kind}:${out.length}`, habitId: habit.id, kind, priority, text, topic });
 
   // Meta con plazo
   if (habit.kind === 'target' && habit.goal.value !== null && habit.goal.start !== null) {
@@ -159,11 +160,11 @@ export function habitMessages(habit, log = {}, today, workouts = {}) {
     if (!w.met) {
       const need = w.times - w.done;
       if (need > w.daysLeft) {
-        if (s.current > 0) push('risk', 50, `${name}: ${w.done} de ${w.times} esta semana; ya no da tiempo, la racha de ${streakLabel(s.current, 'semana')} vuelve a empezar el lunes.`);
+        if (s.current > 0) push('risk', 50, `${name}: ${w.done} de ${w.times} esta semana; ya no da tiempo, la racha de ${streakLabel(s.current, 'semana')} vuelve a empezar el lunes.`, 'week');
       } else if (need === w.daysLeft) {
-        push('risk', 85, `${name}: ${w.done} de ${w.times} esta semana y quedan ${days(w.daysLeft)}: necesitas todos para cumplir.`);
+        push('risk', 85, `${name}: ${w.done} de ${w.times} esta semana y quedan ${days(w.daysLeft)}: necesitas todos para cumplir.`, 'week');
       } else if (w.daysLeft <= 3 || s.current > 0) {
-        push('streak', 45, `${name}: ${w.done} de ${w.times} esta semana, quedan ${days(w.daysLeft)}${s.current ? ` para mantener ${streakLabel(s.current, 'semana')} seguidas` : ''}.`);
+        push('streak', 45, `${name}: ${w.done} de ${w.times} esta semana, quedan ${days(w.daysLeft)}${s.current ? ` para mantener ${streakLabel(s.current, 'semana')} seguidas` : ''}.`, 'week');
       }
     }
   } else if (s.pending) {
