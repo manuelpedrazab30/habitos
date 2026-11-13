@@ -80,6 +80,7 @@ html[data-theme="classic"] .msg.insight { border-left-color: #e0a526; }
 /* ── Iconos (en vez de emojis): color del hábito/categoría o del tema, legible en claro */
 html[data-theme="classic"] .sym { color: color-mix(in srgb, var(--c, var(--accent)) var(--sym-mix), var(--text)); }
 html[data-theme="classic"] :is(.habit-card .emoji, .detail-head .emoji, .cat-pick, .tx-icon) .sym svg { stroke-width: 1.9; }
+html[data-theme="classic"] :is(.chip.on, .cat-pick.on) .sym { color: var(--accent-ink); } /* sobre relleno amarillo */
 html[data-theme="classic"] .sym-fallback { color: transparent; text-shadow: 0 0 0 color-mix(in srgb, var(--c, var(--accent)) var(--sym-mix), var(--text)); }
 
 @media (prefers-reduced-motion: reduce) {

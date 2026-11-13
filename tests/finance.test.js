@@ -236,3 +236,19 @@ test('headline: saldo total y vuelta a "para gastar" si la cuenta ya no existe',
   eq(normalizeFinance({ ...f, mainBalance: 'gone' }, T).mainBalance, null);
   eq(normalizeFinance({ ...f, mainBalance: 'cash' }, T).mainBalance, 'cash', 'se conserva al recargar');
 });
+
+test('reserve: una transferencia manual desde la reserva cuenta como la periódica (sin contar dos veces)', () => {
+  let f = reserveSetup();
+  f = saveTransaction(f, { type: 'transfer', amount: 50000, date: '2026-11-02', accountId: 'save', toAccountId: 'cash' }); // "Mover dinero", sin recurringId
+  const p = periodSummary(f, T);
+  eq([p.fromReserve, p.expected, p.funds, p.left], [50000, 0, 50000, 38000]);
+  ok(!pendingTransfers(f, T).some((x) => x.key === '2026-11-01'), 'ya no pide hacer la quincena del día 1');
+  eq(accountBalances(f).cash, 38000, 'el efectivo sube');
+});
+test('transfer: entre dos cuentas normales mueve saldos pero no es dinero del periodo; con la de origen como reserva, sí', () => {
+  let f = saveTransaction(base(), { type: 'transfer', amount: 20000, date: '2026-11-05', accountId: 'bank', toAccountId: 'card' });
+  eq([accountBalances(f).bank, accountBalances(f).card], [80000, 20000]);
+  eq(periodSummary(f, T).fromReserve, 0);
+  f = { ...f, accounts: f.accounts.map((a) => (a.id === 'bank' ? { ...a, reserve: true } : a)) };
+  eq(periodSummary(f, T).fromReserve, 20000);
+});

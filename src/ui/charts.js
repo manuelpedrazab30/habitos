@@ -24,7 +24,7 @@ const tipAt = (e, html) => {
 export function heatmap({ from, to, value, label, color, onSelect, today }) {
   const cell = 13;
   const gap = 3;
-  const left = 18;
+  const left = 20;
   const top = 16;
   const start = weekStart(from);
   const cols = Math.ceil((diffDays(start, to) + 1) / 7);

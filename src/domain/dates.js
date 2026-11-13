@@ -46,7 +46,7 @@ export function dateRange(from, to) {
 export const minKey = (a, b) => (a < b ? a : b);
 export const maxKey = (a, b) => (a > b ? a : b);
 
-export const WEEKDAYS_SHORT = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+export const WEEKDAYS_SHORT = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do']; // dos letras: la "X" de miércoles confunde fuera de España
 export const WEEKDAYS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
 
 export function formatDate(key, opts = { day: 'numeric', month: 'short' }) {

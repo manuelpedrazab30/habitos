@@ -1,6 +1,6 @@
 import { test, eq, ok, near } from './runner.js';
 import { addDays, dateRange, diffDays, weekday, weekStart } from '../src/domain/dates.js';
-import { createHabit, isDone, isScheduled, validateHabit } from '../src/domain/habits.js';
+import { createHabit, isDone, isScheduled, scheduleLabel, validateHabit } from '../src/domain/habits.js';
 import { computeStreak } from '../src/domain/streaks.js';
 import { habitXp, levelInfo, goalReached } from '../src/domain/gamification.js';
 import { completionRate, durationProgress, linearTrend, targetProjection, totalProjection, weekStatus, weekdayRates } from '../src/domain/stats.js';
@@ -269,4 +269,8 @@ test('xp: cada récord de peso suma', () => {
   const log = logOf(['2026-11-09', '2026-11-10']);
   const w = { '2026-11-09': sess(60, 40), '2026-11-10': sess(62.5, 42.5) };
   eq(habitXp(h, log, T, w) - habitXp(h, log, T), 30);
+});
+
+test('scheduleLabel: días con dos letras (sin la "X" de miércoles)', () => {
+  eq(scheduleLabel({ type: 'days', days: [0, 1, 2, 4] }), 'Lu · Ma · Mi · Vi');
 });

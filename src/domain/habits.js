@@ -1,4 +1,4 @@
-import { addDays, diffDays, weekday, todayKey } from './dates.js';
+import { addDays, diffDays, weekday, todayKey, WEEKDAYS_SHORT } from './dates.js';
 import { normalizeSessions, sessionsFromLegacyRoutine } from './workouts.js';
 
 /**
@@ -143,8 +143,7 @@ export function targetDirection(habit) {
 export function scheduleLabel(schedule) {
   if (schedule.type === 'weekly') return schedule.times === 1 ? '1 vez por semana' : `${schedule.times} veces por semana`;
   if (schedule.type === 'days') {
-    const names = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-    return schedule.days.map((d) => names[d]).join(' · ');
+    return schedule.days.map((d) => WEEKDAYS_SHORT[d]).join(' · ');
   }
   return 'Todos los días';
 }

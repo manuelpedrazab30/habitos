@@ -1,7 +1,7 @@
 import { addDays, formatDate } from '../../domain/dates.js';
 import {
   amountToInput, categoriesByUse, deleteTransaction, formatMoney, lastAccountId, parseAmount, periodSummary,
-  recentExpenses, saveTransaction, validateTransaction,
+  recentExpenses, saveAccount, saveTransaction, validateTransaction,
 } from '../../domain/finance.js';
 import { h, toast } from '../dom.js';
 import { openSheet } from '../sheet.js';
@@ -37,6 +37,7 @@ export function openEntrySheet(ctx, { type = 'expense', tx = null } = {}) {
     recurringId: tx?.recurringId || null, // transferencia periódica hecha con otro importe
     id: tx?.id,
   };
+  let markReserve = false; // transferencia desde una cuenta que no es de reserva: marcarla al guardar
   const money = (c) => formatMoney(c, fin.currency);
   let showAll = false;
   let errors = {};
@@ -65,6 +66,21 @@ export function openEntrySheet(ctx, { type = 'expense', tx = null } = {}) {
           onClick: () => { onPick(it.id); errors = {}; paint(); },
         }, `${it.emoji} ${it.name}`))),
         error ? h('small', { class: 'error' }, error) : null,
+      );
+    }
+
+    // Entre dos cuentas normales una transferencia solo mueve saldos: no suma a "para gastar".
+    // Si sale de tu ahorro, marcarlo como reserva hace que cuente como dinero del periodo.
+    function reserveHint() {
+      const from = fin.accounts.find((a) => a.id === draft.accountId);
+      const to = fin.accounts.find((a) => a.id === draft.toAccountId);
+      if (!from || !to || from.reserve || to.reserve) return null;
+      return h('div', { class: 'entry-block reserve-hint' },
+        h('small', { class: 'muted' }, markReserve
+          ? `«${from.name}» quedará como cuenta de reserva: su saldo no cuenta para gastar y lo que pases desde ella suma a «para gastar».`
+          : `Moverá saldo de «${from.name}» a «${to.name}», pero no suma a «para gastar»: «${from.name}» no es una cuenta de reserva.`),
+        h('button', { type: 'button', class: `chip ${markReserve ? 'on' : ''}`, 'aria-pressed': String(markReserve), onClick: () => { markReserve = !markReserve; paint(); } },
+          markReserve ? '✓ Es mi ahorro (reserva)' : 'Es mi ahorro: marcarla como reserva'),
       );
     }
 
@@ -120,6 +136,7 @@ export function openEntrySheet(ctx, { type = 'expense', tx = null } = {}) {
         draft.type === 'transfer'
           ? chipRow(fin.accounts.filter((a) => a.id !== draft.accountId), draft.toAccountId, (id) => { draft.toAccountId = id; }, { label: 'Hacia', error: errors.toAccount })
           : null,
+        draft.type === 'transfer' ? reserveHint() : null,
 
         h('div', { class: 'entry-block row-inline' },
           h('div', { class: 'chips' },
@@ -153,12 +170,14 @@ export function openEntrySheet(ctx, { type = 'expense', tx = null } = {}) {
         return;
       }
       closeSheet();
-      const next = saveTransaction(current, draft);
+      const fromAcc = current.accounts.find((a) => a.id === draft.accountId);
+      const base = draft.type === 'transfer' && markReserve && fromAcc ? saveAccount(current, { ...fromAcc, reserve: true }) : current;
+      const next = saveTransaction(base, draft);
       const cat = current.categories.find((c) => c.id === draft.categoryId);
       let msg = {
         expense: `Gasto de ${money(draft.amount)} · ${cat?.emoji || ''} ${cat?.name || ''}`,
         income: `Ingreso de ${money(draft.amount)}`,
-        transfer: `Transferencia de ${money(draft.amount)}`,
+        transfer: `Transferencia de ${money(draft.amount)}${base !== current ? ` · «${fromAcc.name}» ahora es reserva` : ''}`,
       }[draft.type];
       if (editing) msg = 'Movimiento actualizado';
       else if (draft.type === 'expense' && draft.date >= periodSummary(next, today).start) {

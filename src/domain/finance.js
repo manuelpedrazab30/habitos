@@ -428,9 +428,15 @@ export function transferDueDates(finance, from, to) {
 /**
  * Transferencia ya hecha para una fecha: una transferencia con su recurringId a ±5 días
  * (menos margen que los gastos fijos: hay fechas cada ~15 días y no deben solaparse).
+ * También vale una transferencia manual sin recurringId entre las mismas dos cuentas.
  */
 export function transferMade(finance, rt, key) {
-  return finance.transactions.find((t) => t.type === 'transfer' && t.recurringId === rt.id && Math.abs(diffDays(key, t.date)) <= 5) || null;
+  const near = (t) => t.type === 'transfer' && Math.abs(diffDays(key, t.date)) <= 5;
+  // La hecha con "Hecho" (lleva recurringId) o una manual ("Mover dinero") entre las mismas cuentas:
+  // si no, el dinero contaría dos veces (pendiente + recibido).
+  return finance.transactions.find((t) => near(t) && t.recurringId === rt.id)
+    || finance.transactions.find((t) => near(t) && !t.recurringId && t.accountId === rt.fromAccountId && t.toAccountId === rt.toAccountId)
+    || null;
 }
 
 /** Las que tocaban hasta hoy y no se han hecho (máx. 30 días atrás). */
