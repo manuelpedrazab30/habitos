@@ -252,3 +252,21 @@ test('transfer: entre dos cuentas normales mueve saldos pero no es dinero del pe
   f = { ...f, accounts: f.accounts.map((a) => (a.id === 'bank' ? { ...a, reserve: true } : a)) };
   eq(periodSummary(f, T).fromReserve, 20000);
 });
+
+test('headline: recibido, gastado y enviado del periodo según la cuenta elegida', () => {
+  let f = reserveSetup(); // Efectivo: gasto de 120 € el día 5
+  f = saveTransaction(f, recurringTransferTx(f.recurringTransfers[0], '2026-11-01', T)); // +500 € a Efectivo
+  f = saveTransaction(f, { type: 'transfer', amount: 5000, date: '2026-11-06', accountId: 'cash', toAccountId: 'save' }); // 50 € de vuelta al ahorro
+  f = saveTransaction(f, { type: 'income', amount: 2000, date: '2026-10-30', accountId: 'cash' }); // periodo anterior: no cuenta
+  const cash = headline(saveMainBalance(f, 'cash'), T);
+  eq([cash.received, cash.expenses, cash.sent], [50000, 12000, 5000]);
+  // Anillo: gastado / (saldo al empezar el periodo 20 € + recibido 500 €)
+  eq([cash.opening, cash.pool], [2000, 52000]);
+  ok(Math.abs(cash.spentShare - 12000 / 52000) < 1e-9, String(cash.spentShare));
+  const fresh = headline(saveMainBalance(reserveSetup(), 'cash'), T); // la quincena aún no se ha pasado: cuenta lo que llega
+  eq([fresh.pool, Math.round(fresh.spentShare * 100)], [50000, 24]);
+  const save = headline(saveMainBalance(f, 'save'), T);
+  eq([save.received, save.expenses, save.sent], [5000, 0, 50000]);
+  const total = headline(saveMainBalance(f, 'total'), T);
+  eq([total.received, total.expenses, total.sent], [0, 12000, 0], 'entre cuentas propias no hay ingresos');
+});

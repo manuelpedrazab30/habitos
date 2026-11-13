@@ -3,11 +3,11 @@
 // obsoletas tras un despliegue); sin conexión, la última copia guardada.
 // Solo se registra en HTTPS fuera de localhost (ver src/app.js), así no interfiere en desarrollo.
 
-const CACHE = 'habitos-v12';
+const CACHE = 'habitos-v13';
 const SHELL = [
   './', 'index.html', 'styles.css', 'themes/classic.css', 'themes/holo.css', 'themes/hud.css', 'themes/gold.css', 'fonts/space-grotesk-latin.woff2', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
-  'src/app.js', 'src/store.js', 'src/demo.js', 'src/backup.js',
+  'src/app.js', 'src/store.js', 'src/demo.js', 'src/backup.js', 'src/version.js',
   'src/domain/dates.js', 'src/domain/habits.js', 'src/domain/streaks.js',
   'src/domain/gamification.js', 'src/domain/stats.js', 'src/domain/messages.js', 'src/domain/workouts.js',
   'src/ui/dom.js', 'src/ui/charts.js', 'src/ui/today.js', 'src/ui/habitForm.js',

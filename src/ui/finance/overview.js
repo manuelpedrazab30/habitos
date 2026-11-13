@@ -82,7 +82,9 @@ export function financeOverviewView(state, ctx) {
     // Periodo de cobro actual
     h('div', { class: 'card period' },
       h('div', { class: 'period-top' },
-        ring(p.funds ? Math.min(1, p.expenses / p.funds) : 0, { size: 76, stroke: 8, color: p.left < 0 ? 'var(--bad)' : 'var(--good)', label: p.funds ? `${Math.round((p.expenses / p.funds) * 100)}%` : '—' }),
+        hl.mode === 'period'
+          ? ring(p.funds ? Math.min(1, p.expenses / p.funds) : 0, { size: 76, stroke: 8, color: p.left < 0 ? 'var(--bad)' : 'var(--good)', label: p.funds ? `${Math.round((p.expenses / p.funds) * 100)}%` : '—' })
+          : ring(hl.spentShare === null ? 0 : Math.min(1, hl.spentShare), { size: 76, stroke: 8, color: hl.spentShare > 1 || hl.value < 0 ? 'var(--bad)' : 'var(--good)', label: hl.spentShare === null ? '—' : `${Math.round(hl.spentShare * 100)}%` }),
         h('div', { class: 'period-main' },
           h('small', { class: 'muted' }, `Del ${formatDate(p.start)} al ${formatDate(p.end)} · cobro en ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'}`),
           h('div', { class: `money-big ${(hl.mode === 'period' ? p.funds && p.free < 0 : hl.value < 0) ? 'neg' : ''}` }, money(hl.value)),
@@ -90,17 +92,24 @@ export function financeOverviewView(state, ctx) {
           balancePicker(fin, ctx),
         ),
       ),
-      h('div', { class: 'period-stats' },
+      // Las cifras de abajo siguen a lo elegido en "Mostrar": el periodo, una cuenta o todas
+      hl.mode === 'period' ? h('div', { class: 'period-stats' },
         stat(p.fromReserve || p.expected ? 'Recibido' : 'Ingresado', money(p.received), 'pos'),
         stat('Gastado', money(p.expenses), 'neg'),
         p.committed ? stat('Fijos pendientes', money(p.committed), 'warn')
           : hasReserve ? stat('Reserva', money(reserveBalance(fin))) : stat('Saldo total', money(total)),
+      ) : h('div', { class: 'period-stats' },
+        stat('Recibido', money(hl.received), 'pos'),
+        stat('Gastado', money(hl.expenses), 'neg'),
+        hl.mode === 'account'
+          ? (hl.fixed ? stat('Fijos pendientes', money(hl.fixed), 'warn') : stat('A otras cuentas', money(hl.sent)))
+          : (p.committed ? stat('Fijos pendientes', money(p.committed), 'warn') : hasReserve ? stat('Reserva', money(reserveBalance(fin))) : stat('Para gastar', money(p.free))),
       ),
       // Dinero que entra este periodo pero aún no se ha movido: ya cuenta en "para gastar"
-      p.pendingItems.length ? h('p', { class: 'muted small pending-line' }, p.pendingItems.map((x) => (x.kind === 'transfer'
+      hl.mode === 'period' && p.pendingItems.length ? h('p', { class: 'muted small pending-line' }, p.pendingItems.map((x) => (x.kind === 'transfer'
         ? `+${money(x.amount)} por pasar desde ${accName(x.rt.fromAccountId)?.name || 'tu reserva'} (día ${Number(x.key.slice(8))})`
         : `+${money(x.amount)} de cobro por registrar (día ${Number(x.key.slice(8))})`)).join(' · '), ' · ya incluido arriba') : null,
-      p.saved ? h('p', { class: 'muted small pending-line' }, `${money(p.saved)} apartados a tu reserva este periodo.`) : null,
+      hl.mode === 'period' && p.saved ? h('p', { class: 'muted small pending-line' }, `${money(p.saved)} apartados a tu reserva este periodo.`) : null,
       h('button', { class: 'btn primary big-add', onClick: () => ctx.openEntry() }, '＋ Añadir gasto'),
     ),
 

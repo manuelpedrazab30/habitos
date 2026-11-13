@@ -344,6 +344,10 @@ export function periodSummary(finance, today) {
  *   que tocan este periodo y aún no se han hecho − fijos pendientes que se pagan desde ella;
  *   `perDay` lo reparte entre los días que quedan hasta el próximo cobro.
  * - 'total': la suma de los saldos de todas las cuentas.
+ * En 'account' y 'total' también da lo recibido (`received`), gastado (`expenses`) y, en una cuenta,
+ * lo pasado a otras (`sent`) en el periodo actual: las cifras bajo la principal siguen a la elección.
+ * `spentShare` (el anillo) = gastado / `pool`, con `pool` = saldo al empezar el periodo (si es
+ * positivo) + lo recibido (+ lo que aún llega, en una cuenta).
  * Si la cuenta elegida ya no existe, vuelve a 'period'.
  */
 export function headline(finance, today, p = periodSummary(finance, today)) {
@@ -356,9 +360,31 @@ export function headline(finance, today, p = periodSummary(finance, today)) {
       .map(({ rt }) => rt));
     const fixed = sumOf(p.pendingFixed.filter((d) => d.cost.accountId === account.id));
     const available = balance + incoming - fixed;
-    return { mode: 'account', account, value: balance, incoming, fixed, available, daysLeft: p.daysLeft, perDay: p.daysLeft > 0 ? Math.floor(available / p.daysLeft) : available };
+    // Movimientos de esta cuenta en el periodo: lo que entra (ingresos + transferencias recibidas),
+    // lo gastado desde ella y lo que se pasa a otras cuentas
+    const txs = finance.transactions.filter((t) => inRange(t, p.start, p.end));
+    const received = sumOf(txs.filter((t) => (t.type === 'income' && t.accountId === account.id) || (t.type === 'transfer' && t.toAccountId === account.id)));
+    const expenses = sumOf(txs.filter((t) => t.type === 'expense' && t.accountId === account.id));
+    const sent = sumOf(txs.filter((t) => t.type === 'transfer' && t.accountId === account.id));
+    // Dinero de esta cuenta para el periodo: lo que tenía al empezar + lo recibido + lo que aún llega.
+    // El anillo es lo gastado sobre eso (igual que "para gastar" usa gastado / dinero del periodo).
+    const opening = accountBalances(finance, addDays(p.start, -1))[account.id] ?? 0;
+    const pool = Math.max(0, opening) + received + incoming;
+    return {
+      mode: 'account', account, value: balance, incoming, fixed, available, received, expenses, sent, opening, pool,
+      spentShare: pool > 0 ? expenses / pool : null,
+      daysLeft: p.daysLeft, perDay: p.daysLeft > 0 ? Math.floor(available / p.daysLeft) : available,
+    };
   }
-  if (sel === 'total') return { mode: 'total', value: totalBalance(finance), daysLeft: p.daysLeft };
+  if (sel === 'total') {
+    // Todas las cuentas: las transferencias entre ellas se anulan, así que solo cuentan ingresos y gastos
+    const txs = finance.transactions.filter((t) => inRange(t, p.start, p.end));
+    const received = sumOf(txs.filter((t) => t.type === 'income'));
+    const expenses = sumOf(txs.filter((t) => t.type === 'expense'));
+    const opening = Object.values(accountBalances(finance, addDays(p.start, -1))).reduce((a, b) => a + b, 0);
+    const pool = Math.max(0, opening) + received;
+    return { mode: 'total', value: totalBalance(finance), daysLeft: p.daysLeft, received, expenses, sent: 0, opening, pool, spentShare: pool > 0 ? expenses / pool : null };
+  }
   return { mode: 'period', value: p.funds ? p.free : -p.expenses, daysLeft: p.daysLeft };
 }
 

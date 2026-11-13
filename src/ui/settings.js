@@ -2,6 +2,8 @@ import { h, toast } from './dom.js';
 import { installCard } from './install.js';
 import { applyTheme, currentTheme, THEMES } from './theme.js';
 import { openSheet } from './sheet.js';
+import { formatDate } from '../domain/dates.js';
+import { APP_DATE, APP_VERSION } from '../version.js';
 import {
   BACKUP_EVERY_DAYS, cryptoAvailable, daysSinceBackup, decryptBackup, encryptBackup, isEncryptedBackup,
   isStoragePersisted, lastBackupAt, markBackupDone, MIN_PASSPHRASE, saveFile,
@@ -43,6 +45,7 @@ export function settingsView(state, ctx) {
         toast('Datos borrados', { action: 'Deshacer', onAction: () => ctx.store.undo(), timeout: 8000 });
       } }, 'Borrar todo'),
     ),
+    h('p', { class: 'muted small app-version' }, `Versión ${APP_VERSION} · ${formatDate(APP_DATE, { day: 'numeric', month: 'short', year: 'numeric' })}`),
   );
 }
 
