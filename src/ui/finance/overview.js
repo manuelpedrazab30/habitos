@@ -3,7 +3,7 @@ import {
   ACCOUNT_PRESETS, accountBalances, CURRENCIES, financeMessages, formatMoney, monthKey, monthLabel, monthlyTotals,
   monthSummary, normalizeFinance, parseAmount, payPeriod, pendingPaydays, periodSummary, saveAccount, saveTransaction, shiftMonth,
   fixedCostPayment, fixedDues, monthBounds, monthlyFixedTotal, monthlyIncomeExpected, pendingFixedCosts,
-  pendingTransfers, recurringTransferTx, reserveBalance,
+  pendingTransfers, recurringTransferTx, reserveBalance, headline, saveMainBalance,
 } from '../../domain/finance.js';
 import { h } from '../dom.js';
 import { barChart, ring } from '../charts.js';
@@ -28,6 +28,7 @@ export function financeOverviewView(state, ctx) {
   const balances = accountBalances(fin);
   const total = Object.values(balances).reduce((a, b) => a + b, 0);
   const hasReserve = fin.accounts.some((a) => a.reserve);
+  const hl = headline(fin, today, p);
   // Transferencias periódicas que ya tocaban y no se han hecho: lo que va a llegar a cada cuenta
   const incoming = {};
   for (const { rt } of dueTransfers) incoming[rt.toAccountId] = (incoming[rt.toAccountId] || 0) + rt.amount;
@@ -84,10 +85,9 @@ export function financeOverviewView(state, ctx) {
         ring(p.funds ? Math.min(1, p.expenses / p.funds) : 0, { size: 76, stroke: 8, color: p.left < 0 ? 'var(--bad)' : 'var(--good)', label: p.funds ? `${Math.round((p.expenses / p.funds) * 100)}%` : '—' }),
         h('div', { class: 'period-main' },
           h('small', { class: 'muted' }, `Del ${formatDate(p.start)} al ${formatDate(p.end)} · cobro en ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'}`),
-          h('div', { class: `money-big ${p.free < 0 ? 'neg' : ''}` }, p.funds ? money(p.free) : money(-p.expenses)),
-          h('small', { class: 'muted' }, p.funds
-            ? (p.free >= 0 ? `para gastar · ${money(p.perDay)} al día${p.committed ? ' (ya descontados los fijos)' : ''}` : p.left >= 0 ? 'te faltan para cubrir los fijos pendientes' : 'por encima de lo ingresado')
-            : 'gastado este periodo (registra tu cobro, o una transferencia periódica desde tu reserva, para ver lo que te queda)'),
+          h('div', { class: `money-big ${(hl.mode === 'period' ? p.funds && p.free < 0 : hl.value < 0) ? 'neg' : ''}` }, money(hl.value)),
+          h('small', { class: 'muted' }, headlineText(hl, p, money)),
+          balancePicker(fin, ctx),
         ),
       ),
       h('div', { class: 'period-stats' },
@@ -229,6 +229,36 @@ function dailyCard(m, money) {
 
 const stat = (label, value, cls = '') => h('div', { class: 'pstat' }, h('small', { class: 'muted' }, label), h('b', { class: cls }, value));
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Texto bajo la cifra grande, según lo que muestre (headline() en domain/finance.js). */
+export function headlineText(hl, p, money) {
+  const days = `${hl.daysLeft} ${hl.daysLeft === 1 ? 'día' : 'días'}`;
+  if (hl.mode === 'account') {
+    const extra = [
+      hl.incoming ? `+${money(hl.incoming)} por llegar` : null,
+      hl.fixed ? `−${money(hl.fixed)} de fijos pendientes` : null,
+    ].filter(Boolean).join(', ');
+    return `en ${hl.account.name} · ${money(hl.perDay)} al día durante ${days}${extra ? ` (${extra})` : ''}`;
+  }
+  if (hl.mode === 'total') return 'saldo de todas tus cuentas';
+  return p.funds
+    ? (p.free >= 0 ? `para gastar · ${money(p.perDay)} al día${p.committed ? ' (ya descontados los fijos)' : ''}` : p.left >= 0 ? 'te faltan para cubrir los fijos pendientes' : 'por encima de lo ingresado')
+    : 'gastado este periodo (registra tu cobro, o una transferencia periódica desde tu reserva, para ver lo que te queda)';
+}
+
+/** Elegir qué muestra la cifra grande: "para gastar", una cuenta o el total. Se guarda en finance.mainBalance. */
+function balancePicker(fin, ctx) {
+  const label = (sel) => (sel === 'total' ? 'saldo total' : sel ? `saldo de ${fin.accounts.find((a) => a.id === sel)?.name}` : 'para gastar');
+  return h('label', { class: 'balance-pick' }, h('span', {}, 'Mostrar'),
+    h('select', {
+      'aria-label': 'Qué muestra la cifra principal',
+      onChange: (e) => ctx.saveFinance(saveMainBalance(fin, e.target.value || null), `Cifra principal: ${label(e.target.value || null)}`),
+    },
+    h('option', { value: '', selected: !fin.mainBalance }, 'Para gastar'),
+    ...fin.accounts.map((a) => h('option', { value: a.id, selected: fin.mainBalance === a.id }, a.name)),
+    fin.accounts.length > 1 ? h('option', { value: 'total', selected: fin.mainBalance === 'total' }, 'Total de cuentas') : null,
+    ));
+}
 
 /**
  * Primer uso: cuentas (con saldo actual opcional), cobros del 1 y del 15 y moneda.

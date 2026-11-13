@@ -17,6 +17,8 @@ import { addDays, dateRange, diffDays, fromKey, toKey } from './dates.js';
 //     una transferencia con recurringId; nunca se hacen solos.
 //   transactions: [{ id, type, amount, date, accountId, toAccountId, categoryId, note, paydayId, fixedCostId, recurringId }]
 //     type: 'expense' | 'income' | 'transfer'; amount siempre positivo.
+//   mainBalance: null | 'total' | accountId    // la cifra grande del resumen: "para gastar" del
+//     periodo (null), el saldo de todas las cuentas o el de una cuenta (ver headline())
 // }
 //
 // Igual que con los hábitos: saldos, totales y periodos se DERIVAN de las transacciones.
@@ -92,6 +94,7 @@ export function normalizeFinance(raw, today) {
     fixedCosts: (f.fixedCosts || []).map((c) => normalizeFixedCost(c, today)).filter(Boolean),
     recurringTransfers: (f.recurringTransfers || []).map((r) => normalizeRecurringTransfer(r, today)).filter(Boolean),
     transactions: (f.transactions || []).map(normalizeTransaction).filter(Boolean),
+    mainBalance: f.mainBalance === 'total' || (f.accounts || []).some((a) => a?.id && a.id === f.mainBalance) ? f.mainBalance : null,
   };
 }
 
@@ -264,6 +267,9 @@ export function payPeriod(finance, key) {
 const inRange = (t, from, to) => t.date >= from && t.date <= to;
 const sumOf = (list) => list.reduce((a, t) => a + t.amount, 0);
 
+/** Qué muestra la cifra grande del resumen (null = "para gastar", 'total' o el id de una cuenta). */
+export const saveMainBalance = (finance, sel) => ({ ...finance, mainBalance: sel === 'total' || finance.accounts.some((a) => a.id === sel) ? sel : null });
+
 /** Cuentas de reserva (ahorro intocable): su dinero no es para el día a día. */
 export const reserveIds = (finance) => new Set(finance.accounts.filter((a) => a.reserve).map((a) => a.id));
 export const spendingBalance = (finance) => {
@@ -331,6 +337,31 @@ export function periodSummary(finance, today) {
 // ── Gastos fijos
 
 /** Fechas de vencimiento entre dos claves (desde el alta de cada gasto fijo). */
+/**
+ * La cifra grande del resumen (y de Inicio), según `finance.mainBalance`:
+ * - 'period' (por defecto): "para gastar" del periodo (`free`), o lo gastado si no hay dinero del periodo.
+ * - 'account': el saldo de esa cuenta. `available` = saldo + transferencias periódicas hacia ella
+ *   que tocan este periodo y aún no se han hecho − fijos pendientes que se pagan desde ella;
+ *   `perDay` lo reparte entre los días que quedan hasta el próximo cobro.
+ * - 'total': la suma de los saldos de todas las cuentas.
+ * Si la cuenta elegida ya no existe, vuelve a 'period'.
+ */
+export function headline(finance, today, p = periodSummary(finance, today)) {
+  const sel = finance.mainBalance;
+  const account = sel && sel !== 'total' ? finance.accounts.find((a) => a.id === sel) : null;
+  if (account) {
+    const balance = accountBalances(finance)[account.id] ?? 0;
+    const incoming = sumOf(transferDueDates(finance, p.start, p.end)
+      .filter(({ key, rt }) => rt.toAccountId === account.id && !transferMade(finance, rt, key))
+      .map(({ rt }) => rt));
+    const fixed = sumOf(p.pendingFixed.filter((d) => d.cost.accountId === account.id));
+    const available = balance + incoming - fixed;
+    return { mode: 'account', account, value: balance, incoming, fixed, available, daysLeft: p.daysLeft, perDay: p.daysLeft > 0 ? Math.floor(available / p.daysLeft) : available };
+  }
+  if (sel === 'total') return { mode: 'total', value: totalBalance(finance), daysLeft: p.daysLeft };
+  return { mode: 'period', value: p.funds ? p.free : -p.expenses, daysLeft: p.daysLeft };
+}
+
 export function fixedDueDates(finance, from, to) {
   const out = [];
   const start = fromKey(from);

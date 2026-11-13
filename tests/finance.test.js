@@ -4,7 +4,7 @@ import {
   normalizeFinance, parseAmount, payPeriod, pendingPaydays, periodSummary, recentExpenses, saveTransaction,
   validateTransaction, fixedDueDates, fixedDues, pendingFixedCosts, monthlyFixedTotal, fixedCostPayment, saveFixedCost,
   deleteFixedCost, saveRecurringTransfer, deleteRecurringTransfer, transferDueDates, pendingTransfers, recurringTransferTx,
-  reserveBalance, spendingBalance,
+  reserveBalance, spendingBalance, headline, saveMainBalance,
 } from '../src/domain/finance.js';
 
 const T = '2026-11-11'; // miércoles
@@ -212,4 +212,27 @@ test('reserve: los cobros sin importe que coinciden con la transferencia desde l
   eq(pendingPaydays(f, T), [], 'el 1 y el 15 los cubre la transferencia de la reserva');
   const g = { ...f, recurringTransfers: [] };
   eq(pendingPaydays(g, T).map((x) => x.key), ['2026-10-01', '2026-10-15', '2026-11-01'], 'sin transferencia sí se piden');
+});
+
+test('headline: por defecto "para gastar" del periodo', () => {
+  const hl = headline(reserveSetup(), T);
+  eq([hl.mode, hl.value], ['period', 38000]);
+});
+test('headline: saldo de una cuenta, con lo que llega y los fijos que salen de ella', () => {
+  let f = saveMainBalance(reserveSetup(), 'cash');
+  let hl = headline(f, T);
+  // Efectivo: −120 € de saldo (la quincena del día 1 aún no se ha pasado: +500 € por llegar)
+  eq([hl.mode, hl.account.id, hl.value, hl.incoming, hl.fixed, hl.available, hl.daysLeft, hl.perDay], ['account', 'cash', -12000, 50000, 0, 38000, 4, 9500]);
+  f = saveFixedCost(f, { id: 'gym', name: 'Gimnasio', amount: 3500, day: 13, categoryId: 'cat-health', accountId: 'cash', createdAt: '2026-10-01' }, T);
+  f = saveTransaction(f, recurringTransferTx(f.recurringTransfers[0], '2026-11-01', T));
+  hl = headline(f, T);
+  eq([hl.value, hl.incoming, hl.fixed, hl.available, hl.perDay], [38000, 0, 3500, 34500, 8625]);
+});
+test('headline: saldo total y vuelta a "para gastar" si la cuenta ya no existe', () => {
+  const f = reserveSetup();
+  eq(headline(saveMainBalance(f, 'total'), T).value, 988000);
+  eq(saveMainBalance(f, 'nope').mainBalance, null, 'una cuenta desconocida no se guarda');
+  eq(headline({ ...f, mainBalance: 'gone' }, T).mode, 'period');
+  eq(normalizeFinance({ ...f, mainBalance: 'gone' }, T).mainBalance, null);
+  eq(normalizeFinance({ ...f, mainBalance: 'cash' }, T).mainBalance, 'cash', 'se conserva al recargar');
 });

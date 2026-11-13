@@ -595,6 +595,10 @@ ul.plain.home-list li { display: flex; justify-content: flex-start; gap: 10px; a
 .tx-icon .sym, .cat-pick .sym { width: 0.95em; height: 0.95em; }
 .nav .nav-item .sym { width: 1em; height: 1em; }
 
+/* Selector de la cifra principal del resumen de finanzas */
+.balance-pick { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.8rem; color: var(--muted); max-width: 100%; }
+.balance-pick select { font: inherit; font-size: 16px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2px 6px; min-width: 0; flex: 0 1 auto; max-width: 100%; }
+
 /* ── Deslizar entre secciones (src/ui/swipe.js) */
 main { touch-action: pan-y pinch-zoom; } /* el navegador hace scroll vertical; el gesto horizontal es nuestro */
 .heatmap-wrap, .session-tabs { touch-action: pan-x pan-y pinch-zoom; } /* estas sí se desplazan en horizontal */

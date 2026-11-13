@@ -2,7 +2,8 @@ import { formatDate } from '../domain/dates.js';
 import { isDone, isScheduled } from '../domain/habits.js';
 import { globalMessages } from '../domain/messages.js';
 import { weekStatus } from '../domain/stats.js';
-import { financeMessages, formatMoney, pendingFixedCosts, pendingPaydays, periodSummary } from '../domain/finance.js';
+import { financeMessages, formatMoney, headline, pendingFixedCosts, pendingPaydays, periodSummary } from '../domain/finance.js';
+import { headlineText } from './finance/overview.js';
 import { inboxMessages } from '../domain/inbox.js';
 import { currentDigest, inboxCache, isConnected } from '../inbox/state.js';
 import { backupOverdue, daysSinceBackup } from '../backup.js';
@@ -79,8 +80,13 @@ export function homeView(state, ctx) {
       h('a', { class: 'card home-tile', href: '#/finanzas' },
         h('div', { class: 'tile-head' }, h('h2', {}, 'Finanzas'), h('span', { class: 'tile-go', 'aria-hidden': 'true' }, '›')),
         hasFinance ? h('div', { class: 'tile-stack' },
-          h('b', { class: `tile-big ${p.funds && p.free < 0 ? 'neg' : ''}` }, p.funds ? money(p.free) : money(-p.expenses)),
-          h('p', { class: 'muted small' }, p.funds ? `para gastar · ${money(p.perDay)} al día · cobro en ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'}${p.expected ? ` · incluye ${money(p.expected)} pendientes` : ''}` : 'gastado este periodo'),
+          ...((hl) => hl.mode === 'period' ? [
+            h('b', { class: `tile-big ${p.funds && p.free < 0 ? 'neg' : ''}` }, money(hl.value)),
+            h('p', { class: 'muted small' }, p.funds ? `para gastar · ${money(p.perDay)} al día · cobro en ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'}${p.expected ? ` · incluye ${money(p.expected)} pendientes` : ''}` : 'gastado este periodo'),
+          ] : [ // la misma cifra que eligió en el resumen de Finanzas (una cuenta o el total)
+            h('b', { class: `tile-big ${hl.value < 0 ? 'neg' : ''}` }, money(hl.value)),
+            h('p', { class: 'muted small' }, headlineText(hl, p, money)),
+          ])(headline(fin, today, p)),
           dueFixed.length || duePay.length ? h('p', { class: 'small warn' }, [
             duePay.length ? `${duePay.length} cobro${duePay.length === 1 ? '' : 's'} por registrar` : null,
             dueFixed.length ? `${dueFixed.length} gasto${dueFixed.length === 1 ? '' : 's'} fijo${dueFixed.length === 1 ? '' : 's'} por pagar` : null,
