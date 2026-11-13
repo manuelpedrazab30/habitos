@@ -18,7 +18,7 @@ python3 serve.py        # servir la app → http://localhost:5173 (puerto opcion
 ```
 (También está en `.claude/launch.json` como `habitos` para el panel de preview.) Los módulos ES necesitan HTTP; abrir `index.html` con `file://` no funciona. `serve.py` es `http.server` con `Cache-Control: no-store`: con `python3 -m http.server` el navegador reutiliza módulos antiguos tras editar y aparecen errores como "does not provide an export named …".
 
-**Iconos**: `python3 tools/make_icons.py` regenera `icons/icon-{180,192,512}.png` (dibujados por código, sin dependencias; amarillo con anillo y check oscuros). Edita el diseño en ese script, no los PNG.
+**Iconos**: `python3 tools/make_icons.py` regenera `icons/icon-{180,192,512}.png` (dibujados por código, sin dependencias; a juego con el Clásico en oscuro: fondo casi negro con rejilla, anillo discontinuo y anillo de progreso + check amarillos con brillo). Edita el diseño en ese script, no los PNG.
 
 **Probar en un iPhone**: `serve.py` escucha en todas las interfaces e imprime la URL de la red local; ábrela en Safari con el móvil en la misma wifi. Por HTTP en la red local no hay service worker (requiere HTTPS), así que la app instalada solo carga mientras el Mac sirve. La versión real está publicada en GitHub Pages.
 
