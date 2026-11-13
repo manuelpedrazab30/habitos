@@ -421,6 +421,7 @@ input.count-input { width: 72px; text-align: center; padding: 6px; }
 .acc-chip .emoji { grid-area: e; font-size: 1.3rem; width: auto; }
 .acc-name { grid-area: n; font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acc-chip b { grid-area: b; }
+.acc-incoming { grid-column: 2; font-size: 0.72rem; font-weight: 600; }
 .tx-list { display: flex; flex-direction: column; padding: 0 12px; }
 .card.tx-list { padding: 0 12px; }
 .tx-row { display: flex; align-items: center; gap: 10px; border: 0; background: none; padding: 10px 0; text-align: left; border-top: 1px solid var(--border); width: 100%; }
@@ -445,6 +446,13 @@ input.count-input { width: 72px; text-align: center; padding: 6px; }
 .sheet-form { display: flex; flex-direction: column; gap: 12px; }
 .inline-field { margin-top: 8px; }
 .warn { color: var(--warn); }
+.head-actions { display: flex; align-items: center; gap: 10px; }
+.pending-line { margin: 8px 0 0; }
+.check-field { display: flex; gap: 10px; align-items: flex-start; }
+.check-field input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--accent); }
+.reserve-tag { margin-left: 6px; font-size: 0.62rem; padding: 1px 5px; vertical-align: 1px; }
+.transfer-due { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.transfer-due .emoji { color: var(--accent); font-size: 1.3rem; }
 .block { display: block; font-weight: 400; }
 .invite { border-style: dashed; }
 .invite p { margin: 4px 0 10px; }
@@ -493,6 +501,13 @@ ul.plain.fixed-list li { display: grid; /* gana a ul.plain li (flex) */ grid-tem
 .backup-card.overdue { border-color: color-mix(in srgb, var(--warn) 55%, var(--border)); }
 .backup-status { font-weight: 600; }
 .backup-status.warn { color: var(--warn); }
+.head-actions { display: flex; align-items: center; gap: 10px; }
+.pending-line { margin: 8px 0 0; }
+.check-field { display: flex; gap: 10px; align-items: flex-start; }
+.check-field input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--accent); }
+.reserve-tag { margin-left: 6px; font-size: 0.62rem; padding: 1px 5px; vertical-align: 1px; }
+.transfer-due { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.transfer-due .emoji { color: var(--accent); font-size: 1.3rem; }
 .nav .nav-item.alert, .icon-link.alert { position: relative; }
 .nav .nav-item.alert::after, .icon-link.alert::after { content: ""; position: absolute; top: 6px; right: calc(50% - 16px); width: 8px; height: 8px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px var(--surface); }
 .icon-link.alert::after { top: 4px; right: 4px; }

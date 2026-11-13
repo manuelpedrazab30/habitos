@@ -3,7 +3,8 @@ import {
   accountBalances, categoriesByUse, deleteAccount, financeMessages, formatMoney, lastAccountId, monthSummary,
   normalizeFinance, parseAmount, payPeriod, pendingPaydays, periodSummary, recentExpenses, saveTransaction,
   validateTransaction, fixedDueDates, fixedDues, pendingFixedCosts, monthlyFixedTotal, fixedCostPayment, saveFixedCost,
-  deleteFixedCost,
+  deleteFixedCost, saveRecurringTransfer, deleteRecurringTransfer, transferDueDates, pendingTransfers, recurringTransferTx,
+  reserveBalance, spendingBalance,
 } from '../src/domain/finance.js';
 
 const T = '2026-11-11'; // miércoles
@@ -55,7 +56,7 @@ test('finance: resumen del periodo y dinero por día hasta el cobro', () => {
   f = saveTransaction(f, exp('b', 5000, T));
   f = saveTransaction(f, exp('old', 99900, '2026-10-30')); // periodo anterior
   const p = periodSummary(f, T);
-  eq([p.income, p.expenses, p.left, p.daysLeft, p.perDay, p.expected], [125000, 15000, 110000, 4, 27500, 125000]);
+  eq([p.income, p.expenses, p.left, p.daysLeft, p.perDay, p.expected], [125000, 15000, 110000, 4, 27500, 0]);
   const msg = financeMessages(f, T)[0].text;
   ok(msg.includes('hasta el cobro del 15') && msg.includes('al día durante 4 días'), msg);
 });
@@ -127,7 +128,7 @@ test('fixed: pagado = gasto con su fixedCostId cerca de la fecha; pendientes has
   let f = withFixed();
   eq(pendingFixedCosts(f, T).map((d) => d.key), ['2026-10-01', '2026-10-13', '2026-11-01']);
   f = saveTransaction(f, { ...fixedCostPayment(f.fixedCosts[0], '2026-11-01', T), id: 'p1' });
-  eq(f.transactions[0], { id: 'p1', type: 'expense', amount: 75000, date: '2026-11-01', accountId: 'bank', toAccountId: null, categoryId: 'cat-home', note: 'Alquiler', paydayId: null, fixedCostId: 'rent' });
+  eq(f.transactions[0], { id: 'p1', type: 'expense', amount: 75000, date: '2026-11-01', accountId: 'bank', toAccountId: null, categoryId: 'cat-home', note: 'Alquiler', paydayId: null, fixedCostId: 'rent', recurringId: null });
   f = saveTransaction(f, { ...fixedCostPayment(f.fixedCosts[0], '2026-10-01', T), id: 'p0', amount: 74000 });
   const due = fixedDues(f, '2026-10-01', '2026-10-31')[0];
   eq([due.paid, due.amount], [true, 74000], 'importe real pagado');
@@ -145,4 +146,70 @@ test('fixed: lo pendiente del periodo se descuenta de lo disponible por día', (
   ok(msgs.some((t) => t.includes('tras los fijos pendientes (Gimnasio 35,00') && t.includes('116,25')), JSON.stringify(msgs));
   ok(msgs.some((t) => t.includes('Gimnasio (35,00') && t.includes('vence en 2 días en Tarjeta')), JSON.stringify(msgs));
   ok(msgs.some((t) => t.includes('Tus gastos fijos suman 815,00') && t.includes('33% de lo que cobras')), JSON.stringify(msgs));
+});
+
+// ── Transferencias periódicas entre cuentas
+test('transfers: periódica los días 1 y 15, pendientes hasta hoy y "Hecho"', () => {
+  let f = base();
+  f = saveRecurringTransfer(f, { id: 'cash', name: 'Efectivo', amount: 20000, fromAccountId: 'bank', toAccountId: 'card', days: [15, 1], createdAt: '2026-10-01' }, T);
+  eq(f.recurringTransfers[0].days, [1, 15], 'días ordenados');
+  eq(transferDueDates(f, '2026-10-01', '2026-11-30').map((d) => d.key), ['2026-10-01', '2026-10-15', '2026-11-01', '2026-11-15']);
+  eq(pendingTransfers(f, T).map((d) => d.key), ['2026-10-15', '2026-11-01'], 'máx. 30 días atrás, hasta hoy');
+  f = saveTransaction(f, { ...recurringTransferTx(f.recurringTransfers[0], '2026-11-01', T), id: 't1' });
+  eq(f.transactions[0].recurringId, 'cash');
+  eq(pendingTransfers(f, T).map((d) => d.key), ['2026-10-15'], 'la del 1 ya está hecha');
+  eq(accountBalances(f), { bank: 80000, card: 20000 }, 'mueve dinero sin gastarlo');
+  eq(deleteRecurringTransfer(f, 'cash').transactions.length, 1, 'borrarla conserva las hechas');
+});
+test('transfers: validación (cuentas distintas, importe y algún día)', () => {
+  const f = base();
+  eq(saveRecurringTransfer(f, { amount: 100, fromAccountId: 'bank', toAccountId: 'bank', days: [1] }, T).recurringTransfers.length, 0);
+  eq(saveRecurringTransfer(f, { amount: 0, fromAccountId: 'bank', toAccountId: 'card', days: [1] }, T).recurringTransfers.length, 0);
+  eq(saveRecurringTransfer(f, { amount: 100, fromAccountId: 'bank', toAccountId: 'card', days: [40] }, T).recurringTransfers.length, 0);
+  eq(normalizeFinance({ ...f, recurringTransfers: undefined }, T).recurringTransfers, [], 'datos antiguos sin el campo');
+});
+
+// ── Cuenta de reserva: el dinero del periodo sale de transferencias desde la reserva
+function reserveSetup() {
+  let f = normalizeFinance({
+    since: '2026-10-01',
+    accounts: [{ id: 'save', name: 'Ahorro', initial: 1000000, reserve: true }, { id: 'cash', name: 'Efectivo', initial: 0 }],
+    paydays: [{ id: 'p1', day: 1 }, { id: 'p15', day: 15 }], // sin importe: no hay nómina
+  }, T);
+  f = saveRecurringTransfer(f, { id: 'q', name: 'Quincena', amount: 50000, fromAccountId: 'save', toAccountId: 'cash', days: [1, 15], createdAt: '2026-10-01' }, T);
+  return saveTransaction(f, exp('e1', 12000, '2026-11-05', 'cat-food', 'cash'));
+}
+test('reserve: sin haber pasado aún el dinero, el periodo no sale en negativo', () => {
+  const p = periodSummary(reserveSetup(), T);
+  eq([p.received, p.expected, p.funds, p.expenses, p.left, p.free], [0, 50000, 50000, 12000, 38000, 38000]);
+  eq(p.pendingItems.map((x) => [x.kind, x.key, x.amount]), [['transfer', '2026-11-01', 50000]]);
+  const msg = financeMessages(reserveSetup(), T)[0].text;
+  ok(msg.includes('Te quedan 380,00') && msg.includes('aún por pasar desde tu reserva'), msg);
+});
+test('reserve: al hacer la transferencia cuenta como recibido y deja de estar pendiente', () => {
+  let f = reserveSetup();
+  f = saveTransaction(f, recurringTransferTx(f.recurringTransfers[0], '2026-11-01', T));
+  const p = periodSummary(f, T);
+  eq([p.fromReserve, p.received, p.expected, p.left], [50000, 50000, 0, 38000]);
+  eq([reserveBalance(f), spendingBalance(f)], [950000, 38000]);
+});
+test('reserve: ingresos a la reserva no son para gastar; apartar a la reserva resta', () => {
+  let f = reserveSetup();
+  f = saveTransaction(f, { type: 'income', amount: 300000, date: '2026-11-02', accountId: 'save' });
+  f = saveTransaction(f, exp('e2', 99999, '2026-11-03', 'cat-shop', 'save')); // gasto pagado desde la reserva
+  eq(periodSummary(f, T).left, 38000, 'ni el ingreso ni el gasto de la reserva cambian el periodo');
+  f = saveTransaction(f, { type: 'transfer', amount: 10000, date: '2026-11-06', accountId: 'cash', toAccountId: 'save' });
+  eq([periodSummary(f, T).saved, periodSummary(f, T).left], [10000, 28000]);
+});
+test('reserve: un cobro con importe aún sin registrar también cuenta como pendiente', () => {
+  const f = base({ since: '2026-11-01' });
+  const p = periodSummary(f, T);
+  eq([p.received, p.expected, p.funds], [0, 125000, 125000]);
+  eq(p.pendingItems[0].kind, 'payday');
+});
+test('reserve: los cobros sin importe que coinciden con la transferencia desde la reserva no piden registrarse', () => {
+  const f = reserveSetup();
+  eq(pendingPaydays(f, T), [], 'el 1 y el 15 los cubre la transferencia de la reserva');
+  const g = { ...f, recurringTransfers: [] };
+  eq(pendingPaydays(g, T).map((x) => x.key), ['2026-10-01', '2026-10-15', '2026-11-01'], 'sin transferencia sí se piden');
 });

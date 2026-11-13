@@ -3,6 +3,7 @@ import {
   ACCOUNT_PRESETS, accountBalances, CURRENCIES, financeMessages, formatMoney, monthKey, monthLabel, monthlyTotals,
   monthSummary, normalizeFinance, parseAmount, payPeriod, pendingPaydays, periodSummary, saveAccount, saveTransaction, shiftMonth,
   fixedCostPayment, fixedDues, monthBounds, monthlyFixedTotal, monthlyIncomeExpected, pendingFixedCosts,
+  pendingTransfers, recurringTransferTx, reserveBalance,
 } from '../../domain/finance.js';
 import { h } from '../dom.js';
 import { barChart, ring } from '../charts.js';
@@ -21,10 +22,15 @@ export function financeOverviewView(state, ctx) {
   const m = monthSummary(fin, mk, today);
   const pending = pendingPaydays(fin, today);
   const dueFixed = pendingFixedCosts(fin, today);
+  const dueTransfers = pendingTransfers(fin, today);
   const catOf = (id) => fin.categories.find((c) => c.id === id);
-  const messages = financeMessages(fin, today).filter((x) => x.priority < 80 || p.income === 0).slice(0, 3); // el "te quedan" ya está en la tarjeta
+  const messages = financeMessages(fin, today).filter((x) => x.priority < 80 || p.funds === 0).slice(0, 3); // el "te quedan" ya está en la tarjeta
   const balances = accountBalances(fin);
   const total = Object.values(balances).reduce((a, b) => a + b, 0);
+  const hasReserve = fin.accounts.some((a) => a.reserve);
+  // Transferencias periódicas que ya tocaban y no se han hecho: lo que va a llegar a cada cuenta
+  const incoming = {};
+  for (const { rt } of dueTransfers) incoming[rt.toAccountId] = (incoming[rt.toAccountId] || 0) + rt.amount;
   const recent = [...fin.transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, 5);
   const accName = (id) => fin.accounts.find((a) => a.id === id);
   const maxCat = Math.max(1, ...m.categories.map((r) => Math.max(r.spent, r.budget || 0)));
@@ -59,23 +65,42 @@ export function financeOverviewView(state, ctx) {
       h('button', { class: 'btn ghost small', onClick: () => ctx.openEntry({ tx: fixedCostPayment(cost, key, today) }) }, cost.accountId ? 'Otro importe' : 'Registrar'),
     )),
 
+    // Transferencias periódicas que tocan (p. ej. a efectivo cada 1 y 15): un toque
+    dueTransfers.map(({ key, rt }) => h('div', { class: 'card payday transfer-due' },
+      h('span', { class: 'emoji' }, '⇄'),
+      h('div', { class: 'payday-text' },
+        h('strong', {}, `${rt.name || 'Pasar dinero'} · ${money(rt.amount)}`),
+        h('p', { class: 'muted small' }, `${accName(rt.fromAccountId)?.name || '?'} → ${accName(rt.toAccountId)?.name || '?'} · ${key === today ? 'toca hoy' : `tocaba el ${formatDate(key, { day: 'numeric', month: 'long' })}`}`),
+      ),
+      accName(rt.fromAccountId) && accName(rt.toAccountId)
+        ? h('button', { class: 'btn primary small', onClick: () => ctx.saveFinance(saveTransaction(fin, recurringTransferTx(rt, key, today)), `${money(rt.amount)} pasados a ${accName(rt.toAccountId).name}`) }, 'Hecho')
+        : null,
+      h('button', { class: 'btn ghost small', onClick: () => ctx.openEntry({ tx: recurringTransferTx(rt, key, today) }) }, 'Otro importe'),
+    )),
+
     // Periodo de cobro actual
     h('div', { class: 'card period' },
       h('div', { class: 'period-top' },
-        ring(p.income ? Math.min(1, p.expenses / p.income) : 0, { size: 76, stroke: 8, color: p.left < 0 ? 'var(--bad)' : 'var(--good)', label: p.income ? `${Math.round((p.expenses / p.income) * 100)}%` : '—' }),
+        ring(p.funds ? Math.min(1, p.expenses / p.funds) : 0, { size: 76, stroke: 8, color: p.left < 0 ? 'var(--bad)' : 'var(--good)', label: p.funds ? `${Math.round((p.expenses / p.funds) * 100)}%` : '—' }),
         h('div', { class: 'period-main' },
           h('small', { class: 'muted' }, `Del ${formatDate(p.start)} al ${formatDate(p.end)} · cobro en ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'}`),
-          h('div', { class: `money-big ${p.free < 0 ? 'neg' : ''}` }, p.income ? money(p.free) : money(-p.expenses)),
-          h('small', { class: 'muted' }, p.income
+          h('div', { class: `money-big ${p.free < 0 ? 'neg' : ''}` }, p.funds ? money(p.free) : money(-p.expenses)),
+          h('small', { class: 'muted' }, p.funds
             ? (p.free >= 0 ? `para gastar · ${money(p.perDay)} al día${p.committed ? ' (ya descontados los fijos)' : ''}` : p.left >= 0 ? 'te faltan para cubrir los fijos pendientes' : 'por encima de lo ingresado')
-            : 'gastado este periodo (registra el cobro para ver lo que te queda)'),
+            : 'gastado este periodo (registra tu cobro, o una transferencia periódica desde tu reserva, para ver lo que te queda)'),
         ),
       ),
       h('div', { class: 'period-stats' },
-        stat('Ingresado', money(p.income), 'pos'),
+        stat(p.fromReserve || p.expected ? 'Recibido' : 'Ingresado', money(p.received), 'pos'),
         stat('Gastado', money(p.expenses), 'neg'),
-        p.committed ? stat('Fijos pendientes', money(p.committed), 'warn') : stat('Saldo total', money(total)),
+        p.committed ? stat('Fijos pendientes', money(p.committed), 'warn')
+          : hasReserve ? stat('Reserva', money(reserveBalance(fin))) : stat('Saldo total', money(total)),
       ),
+      // Dinero que entra este periodo pero aún no se ha movido: ya cuenta en "para gastar"
+      p.pendingItems.length ? h('p', { class: 'muted small pending-line' }, p.pendingItems.map((x) => (x.kind === 'transfer'
+        ? `+${money(x.amount)} por pasar desde ${accName(x.rt.fromAccountId)?.name || 'tu reserva'} (día ${Number(x.key.slice(8))})`
+        : `+${money(x.amount)} de cobro por registrar (día ${Number(x.key.slice(8))})`)).join(' · '), ' · ya incluido arriba') : null,
+      p.saved ? h('p', { class: 'muted small pending-line' }, `${money(p.saved)} apartados a tu reserva este periodo.`) : null,
       h('button', { class: 'btn primary big-add', onClick: () => ctx.openEntry() }, '＋ Añadir gasto'),
     ),
 
@@ -118,10 +143,14 @@ export function financeOverviewView(state, ctx) {
     ),
 
     h('div', { class: 'card' },
-      h('div', { class: 'card-head' }, h('h2', {}, 'Cuentas'), h('a', { href: '#/finanzas/cuentas', class: 'small' }, 'Editar cuentas')),
+      h('div', { class: 'card-head' }, h('h2', {}, 'Cuentas'),
+        h('div', { class: 'head-actions' },
+          fin.accounts.length > 1 ? h('button', { class: 'btn ghost small', onClick: () => ctx.openEntry({ type: 'transfer' }) }, '⇄ Mover dinero') : null,
+          h('a', { href: '#/finanzas/cuentas', class: 'small' }, 'Editar'))),
       h('div', { class: 'acc-strip' }, fin.accounts.map((a) => h('div', { class: 'acc-chip' },
         h('button', { class: 'acc-main', 'aria-label': `Movimientos de ${a.name}`, onClick: () => { ctx.ui.txFilter = { accountId: a.id }; ctx.go('#/finanzas/movimientos'); } },
-          h('span', { class: 'emoji' }, a.emoji), h('span', { class: 'acc-name' }, a.name), h('b', { class: balances[a.id] < 0 ? 'neg' : '' }, money(balances[a.id] ?? 0))),
+          h('span', { class: 'emoji' }, a.emoji), h('span', { class: 'acc-name' }, a.name, a.reserve ? h('span', { class: 'tag reserve-tag' }, 'Reserva') : null), h('b', { class: balances[a.id] < 0 ? 'neg' : '' }, money(balances[a.id] ?? 0)),
+          incoming[a.id] ? h('small', { class: 'acc-incoming pos' }, `+${money(incoming[a.id])} por llegar`) : null),
         h('button', { class: 'acc-edit', 'aria-label': `Editar ${a.name}`, title: 'Editar nombre y saldo', onClick: () => accountSheet(ctx, a) }, '✎'),
       ))),
     ),

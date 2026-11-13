@@ -34,6 +34,7 @@ export function openEntrySheet(ctx, { type = 'expense', tx = null } = {}) {
     note: tx?.note || '',
     paydayId: tx?.paydayId || null,
     fixedCostId: tx?.fixedCostId || null, // pago de un gasto fijo con otro importe
+    recurringId: tx?.recurringId || null, // transferencia periódica hecha con otro importe
     id: tx?.id,
   };
   const money = (c) => formatMoney(c, fin.currency);
@@ -162,7 +163,7 @@ export function openEntrySheet(ctx, { type = 'expense', tx = null } = {}) {
       if (editing) msg = 'Movimiento actualizado';
       else if (draft.type === 'expense' && draft.date >= periodSummary(next, today).start) {
         const p = periodSummary(next, today);
-        if (p.income > 0) msg += `. Quedan ${money(p.left)} hasta el ${formatDate(p.next)}`;
+        if (p.funds > 0) msg += `. Quedan ${money(p.free)} para gastar hasta el ${formatDate(p.next)}`;
       }
       ctx.saveFinance(next, msg);
     }

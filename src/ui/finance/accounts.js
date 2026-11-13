@@ -1,7 +1,7 @@
 import {
   accountBalances, accountInUse, amountToInput, categoryInUse, CURRENCIES, deleteAccount, deleteCategory, formatMoney,
   monthKey, monthSummary, normalizeFinance, parseAmount, saveAccount, saveCategory, savePaydays,
-  deleteFixedCost, monthlyFixedTotal, saveFixedCost,
+  deleteFixedCost, monthlyFixedTotal, saveFixedCost, deleteRecurringTransfer, saveRecurringTransfer,
 } from '../../domain/finance.js';
 import { COLORS } from '../../domain/habits.js';
 import { todayKey } from '../../domain/dates.js';
@@ -24,11 +24,14 @@ export function accountsView(state, ctx) {
     h('h1', {}, 'Cuentas y categorías'),
 
     h('div', { class: 'card' },
-      h('div', { class: 'card-head' }, h('h2', {}, 'Cuentas'), h('button', { class: 'btn ghost small', onClick: () => accountSheet(ctx) }, '＋ Cuenta')),
-      h('p', { class: 'muted small' }, 'Toca una cuenta para cambiarle el nombre, el icono o el saldo inicial. Sus movimientos se conservan.'),
+      h('div', { class: 'card-head' }, h('h2', {}, 'Cuentas'),
+        h('div', { class: 'head-actions' },
+          fin.accounts.length > 1 ? h('button', { class: 'btn ghost small', onClick: () => ctx.openEntry({ type: 'transfer' }) }, '⇄ Mover dinero') : null,
+          h('button', { class: 'btn ghost small', onClick: () => accountSheet(ctx) }, '＋ Cuenta'))),
+      h('p', { class: 'muted small' }, 'Toca una cuenta para cambiarle el nombre, el icono o el saldo inicial, o para marcarla como reserva (ahorro que no tocas). Sus movimientos se conservan.'),
       fin.accounts.length ? h('ul', { class: 'plain settings-list' }, fin.accounts.map((a) => h('li', {},
         h('button', { class: 'settings-row', 'aria-label': `Editar ${a.name}`, onClick: () => accountSheet(ctx, a) },
-          h('span', { class: 'emoji' }, a.emoji), h('span', { class: 'grow' }, a.name),
+          h('span', { class: 'emoji' }, a.emoji), h('span', { class: 'grow' }, a.name, a.reserve ? h('span', { class: 'tag reserve-tag' }, 'Reserva') : null),
           h('b', { class: balances[a.id] < 0 ? 'neg' : '' }, money(balances[a.id] ?? 0)), editMark()),
       ))) : h('p', { class: 'muted' }, 'Sin cuentas todavía.'),
     ),
@@ -42,6 +45,18 @@ export function accountsView(state, ctx) {
           h('span', { class: 'muted' }, p.amount ? `${money(p.amount)} · ${accName(p.accountId)?.name || 'sin cuenta'}` : 'Importe variable'), editMark()),
       ))),
     ),
+
+    fin.accounts.length > 1 ? h('div', { class: 'card' },
+      h('div', { class: 'card-head' }, h('h2', {}, 'Transferencias periódicas'), h('button', { class: 'btn ghost small', onClick: () => transferSheet(ctx) }, '＋ Transferencia')),
+      h('p', { class: 'muted small' }, 'Dinero que pasas entre tus cuentas siempre en las mismas fechas (p. ej. a efectivo cada día 1 y 15). Ese día te aviso para marcarla con un toque. No cuenta como gasto.'),
+      (fin.recurringTransfers || []).length ? h('ul', { class: 'plain settings-list' }, fin.recurringTransfers.map((r) => h('li', {},
+        h('button', { class: 'settings-row', 'aria-label': `Editar ${r.name || 'transferencia'}`, onClick: () => transferSheet(ctx, r) },
+          h('span', { class: 'emoji' }, '⇄'),
+          h('span', { class: 'grow' }, r.name || `${accName(r.fromAccountId)?.name || '?'} → ${accName(r.toAccountId)?.name || '?'}`,
+            h('small', { class: 'muted block' }, `${r.name ? `${accName(r.fromAccountId)?.name || '?'} → ${accName(r.toAccountId)?.name || '?'} · ` : ''}días ${r.days.join(' y ')}`)),
+          h('span', { class: 'muted' }, money(r.amount)), editMark()),
+      ))) : null,
+    ) : null,
 
     h('div', { class: 'card' },
       h('div', { class: 'card-head' }, h('h2', {}, 'Gastos fijos'), h('button', { class: 'btn ghost small', onClick: () => fixedCostSheet(ctx) }, '＋ Gasto fijo')),
@@ -126,20 +141,24 @@ function emojiPicker(list, current, onPick) {
 
 export function accountSheet(ctx, acc = null) {
   const fin = ctx.store.get().finance;
-  const d = { ...(acc || { name: '', emoji: '🏦', initial: 0 }) };
+  const d = { ...(acc || { name: '', emoji: '🏦', initial: 0, reserve: false }) };
+  const reserve = h('input', { type: 'checkbox', checked: Boolean(d.reserve), 'aria-label': 'Cuenta de reserva' });
   const name = h('input', { value: d.name, placeholder: 'Ej.: Cuenta nómina', required: true });
   const initial = h('input', { inputmode: 'decimal', value: amountToInput(Math.abs(d.initial)) && `${d.initial < 0 ? '-' : ''}${amountToInput(Math.abs(d.initial))}`, placeholder: '0,00' });
   formSheet(acc ? 'Editar cuenta' : 'Nueva cuenta', [
     field('Nombre', name),
     emojiPicker(ACCOUNT_EMOJIS, d.emoji, (e) => { d.emoji = e; }),
     field('Saldo inicial', initial, 'El saldo que tenía antes del primer movimiento registrado aquí. En una tarjeta de crédito con deuda, ponlo en negativo.'),
+    h('label', { class: 'check-field' }, reserve, h('span', {},
+      h('b', {}, 'Cuenta de reserva'),
+      h('small', { class: 'muted block' }, 'Ahorro que no tocas en el día a día. Su saldo no cuenta como dinero para gastar; lo que pasas desde aquí a tus otras cuentas sí cuenta como el dinero del periodo.'))),
   ], {
     focus: name,
     onSave: () => {
       if (!name.value.trim()) return 'Ponle un nombre.';
       const raw = initial.value.trim();
       const c = parseAmount(raw.replace('-', '')) ?? 0;
-      ctx.saveFinance(saveAccount(ctx.store.get().finance, { ...d, name: name.value, initial: raw.startsWith('-') ? -c : c }), acc ? 'Cuenta guardada' : `Cuenta “${name.value.trim()}” creada`);
+      ctx.saveFinance(saveAccount(ctx.store.get().finance, { ...d, name: name.value, initial: raw.startsWith('-') ? -c : c, reserve: reserve.checked }), acc ? 'Cuenta guardada' : `Cuenta “${name.value.trim()}” creada`);
       return null;
     },
     onDelete: acc ? () => ctx.saveFinance(deleteAccount(ctx.store.get().finance, acc.id), 'Cuenta eliminada') : null,
@@ -226,6 +245,42 @@ export function fixedCostSheet(ctx, cost = null) {
       return null;
     },
     onDelete: cost ? () => ctx.saveFinance(deleteFixedCost(ctx.store.get().finance, cost.id), 'Gasto fijo eliminado (sus pagos se conservan)') : null,
+  });
+}
+
+/** Crear/editar una transferencia periódica: importe, de qué cuenta a cuál y qué días del mes. */
+export function transferSheet(ctx, rt = null) {
+  const fin = ctx.store.get().finance;
+  const accountOpts = (selected) => fin.accounts.map((a) => h('option', { value: a.id, selected: selected === a.id }, `${a.emoji} ${a.name}`));
+  // Por defecto: de la primera cuenta a la de efectivo (si hay), los días 1 y 15
+  const cash = fin.accounts.find((a) => a.emoji === '💵' || /efectivo|cash/i.test(a.name));
+  const from = rt?.fromAccountId || fin.accounts.find((a) => a.id !== cash?.id)?.id || fin.accounts[0].id;
+  const to = rt?.toAccountId || cash?.id || fin.accounts.find((a) => a.id !== from)?.id;
+  const name = h('input', { value: rt?.name || '', placeholder: 'Ej.: Efectivo de la quincena (opcional)' });
+  const amount = h('input', { inputmode: 'decimal', value: amountToInput(rt?.amount), placeholder: '0,00' });
+  const fromSel = h('select', {}, accountOpts(from));
+  const toSel = h('select', {}, accountOpts(to));
+  const day1 = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: 31, value: rt?.days?.[0] ?? 1 });
+  const day2 = h('input', { type: 'number', inputmode: 'numeric', min: 1, max: 31, value: rt ? (rt.days[1] ?? '') : 15, placeholder: 'Opcional' });
+  formSheet(rt ? 'Editar transferencia periódica' : 'Nueva transferencia periódica', [
+    field('Importe', amount),
+    h('div', { class: 'row' }, field('Desde', fromSel), field('Hacia', toSel)),
+    h('div', { class: 'row' }, field('Día del mes', day1), field('Y también el día', day2, 'Cada 15 días: 1 y 15.')),
+    field('Nombre', name),
+  ], {
+    focus: rt ? null : amount,
+    onSave: () => {
+      const c = parseAmount(amount.value);
+      if (!c) return 'Escribe el importe.';
+      if (fromSel.value === toSel.value) return 'Elige dos cuentas distintas.';
+      const days = [day1.value, day2.value].map((d) => Math.round(Number(d))).filter((d) => d >= 1 && d <= 31);
+      if (!days.length) return 'Indica al menos un día del mes (1–31).';
+      ctx.saveFinance(saveRecurringTransfer(ctx.store.get().finance, {
+        ...(rt || {}), name: name.value, amount: c, fromAccountId: fromSel.value, toAccountId: toSel.value, days,
+      }, ctx.today()), rt ? 'Transferencia guardada' : 'Transferencia periódica creada');
+      return null;
+    },
+    onDelete: rt ? () => ctx.saveFinance(deleteRecurringTransfer(ctx.store.get().finance, rt.id), 'Transferencia periódica eliminada (las hechas se conservan)') : null,
   });
 }
 

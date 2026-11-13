@@ -6,13 +6,16 @@ import { addDays, dateRange, diffDays, fromKey, toKey } from './dates.js';
 // state.finance = {
 //   currency: 'EUR',
 //   since: 'YYYY-MM-DD',                       // alta del módulo: no se piden cobros anteriores
-//   accounts:   [{ id, name, emoji, initial }],  // saldo inicial en céntimos
+//   accounts:   [{ id, name, emoji, initial, reserve }],  // saldo inicial en céntimos; reserve = ahorro intocable
 //   categories: [{ id, name, emoji, color, budget }],   // budget mensual en céntimos (opcional)
 //   paydays:    [{ id, day, amount, accountId }],       // ingresos fijos: día del mes (1 y 15 por defecto)
 //   fixedCosts: [{ id, name, amount, categoryId, accountId, day, frequency, month, createdAt }]
 //     gastos fijos (alquiler, suscripciones…): frequency 'monthly' | 'yearly' (month 1–12).
 //     Pagarlo crea un gasto con fixedCostId; nunca se marcan solos.
-//   transactions: [{ id, type, amount, date, accountId, toAccountId, categoryId, note, paydayId, fixedCostId }]
+//   recurringTransfers: [{ id, name, amount, fromAccountId, toAccountId, days: [1, 15], createdAt }]
+//     movimientos periódicos entre tus cuentas (p. ej. a efectivo cada día 1 y 15). Hacerlo crea
+//     una transferencia con recurringId; nunca se hacen solos.
+//   transactions: [{ id, type, amount, date, accountId, toAccountId, categoryId, note, paydayId, fixedCostId, recurringId }]
 //     type: 'expense' | 'income' | 'transfer'; amount siempre positivo.
 // }
 //
@@ -37,7 +40,7 @@ export const ACCOUNT_PRESETS = [
   { name: 'Cuenta corriente', emoji: '🏦' },
   { name: 'Tarjeta de crédito', emoji: '💳' },
   { name: 'Efectivo', emoji: '💵' },
-  { name: 'Ahorro', emoji: '🐷' },
+  { name: 'Ahorro', emoji: '🐷', reserve: true },
 ];
 
 const uid = (p) => (crypto.randomUUID ? `${p}-${crypto.randomUUID()}` : `${p}-${Date.now()}${Math.random().toString(36).slice(2)}`);
@@ -81,12 +84,13 @@ export function normalizeFinance(raw, today) {
   return {
     currency: CURRENCIES.includes(f.currency) ? f.currency : 'EUR',
     since: f.since || today,
-    accounts: (f.accounts || []).filter((a) => a?.name).map((a) => ({ id: a.id || uid('acc'), name: String(a.name).trim(), emoji: a.emoji || '🏦', initial: cents(a.initial) ?? 0 })),
+    accounts: (f.accounts || []).filter((a) => a?.name).map((a) => ({ id: a.id || uid('acc'), name: String(a.name).trim(), emoji: a.emoji || '🏦', initial: cents(a.initial) ?? 0, reserve: Boolean(a.reserve) })),
     categories: categories.filter((c) => c?.name).map((c) => ({ id: c.id || uid('cat'), name: String(c.name).trim(), emoji: c.emoji || '📦', color: c.color || '#64748b', budget: cents(c.budget) })),
     paydays: (Array.isArray(f.paydays) ? f.paydays : [{ day: 1 }, { day: 15 }]).map((p) => ({
       id: p.id || uid('pay'), day: Math.min(31, Math.max(1, Math.round(Number(p.day) || 1))), amount: cents(p.amount), accountId: p.accountId || null,
     })).sort((a, b) => a.day - b.day),
     fixedCosts: (f.fixedCosts || []).map((c) => normalizeFixedCost(c, today)).filter(Boolean),
+    recurringTransfers: (f.recurringTransfers || []).map((r) => normalizeRecurringTransfer(r, today)).filter(Boolean),
     transactions: (f.transactions || []).map(normalizeTransaction).filter(Boolean),
   };
 }
@@ -124,6 +128,7 @@ export function normalizeTransaction(t) {
     note: String(t.note || '').trim(),
     paydayId: type === 'income' ? t.paydayId || null : null,
     fixedCostId: type === 'expense' ? t.fixedCostId || null : null,
+    recurringId: type === 'transfer' ? t.recurringId || null : null,
   };
 }
 
@@ -148,7 +153,7 @@ export function saveTransaction(finance, input) {
 export const deleteTransaction = (finance, id) => ({ ...finance, transactions: finance.transactions.filter((t) => t.id !== id) });
 
 export function saveAccount(finance, input) {
-  const acc = { id: input.id || uid('acc'), name: String(input.name || '').trim(), emoji: input.emoji || '🏦', initial: cents(input.initial) ?? 0 };
+  const acc = { id: input.id || uid('acc'), name: String(input.name || '').trim(), emoji: input.emoji || '🏦', initial: cents(input.initial) ?? 0, reserve: Boolean(input.reserve) };
   if (!acc.name) return finance;
   const exists = finance.accounts.some((a) => a.id === acc.id);
   return { ...finance, accounts: exists ? finance.accounts.map((a) => (a.id === acc.id ? acc : a)) : [...finance.accounts, acc] };
@@ -159,6 +164,7 @@ export const accountInUse = (finance, id) => finance.transactions.some((t) => t.
 export const deleteAccount = (finance, id) => (accountInUse(finance, id) ? finance : {
   ...finance,
   accounts: finance.accounts.filter((a) => a.id !== id),
+  recurringTransfers: (finance.recurringTransfers || []).filter((r) => r.fromAccountId !== id && r.toAccountId !== id),
   paydays: finance.paydays.map((p) => (p.accountId === id ? { ...p, accountId: null } : p)),
 });
 
@@ -183,6 +189,24 @@ export function saveFixedCost(finance, input, today) {
 
 /** Borrar un gasto fijo no toca los pagos ya registrados (quedan como gastos normales). */
 export const deleteFixedCost = (finance, id) => ({ ...finance, fixedCosts: finance.fixedCosts.filter((c) => c.id !== id) });
+
+export function normalizeRecurringTransfer(r, today) {
+  const amount = cents(r?.amount);
+  const days = [...new Set((r?.days || []).map((d) => Math.round(Number(d))).filter((d) => d >= 1 && d <= 31))].sort((a, b) => a - b);
+  if (!(amount > 0) || !r?.fromAccountId || !r?.toAccountId || r.fromAccountId === r.toAccountId || !days.length) return null;
+  return { id: r.id || uid('rtx'), name: String(r.name || '').trim(), amount, fromAccountId: r.fromAccountId, toAccountId: r.toAccountId, days, createdAt: r.createdAt || today };
+}
+
+export function saveRecurringTransfer(finance, input, today) {
+  const rt = normalizeRecurringTransfer(input, today);
+  if (!rt) return finance;
+  const list = finance.recurringTransfers || [];
+  const exists = list.some((x) => x.id === rt.id);
+  return { ...finance, recurringTransfers: exists ? list.map((x) => (x.id === rt.id ? rt : x)) : [...list, rt] };
+}
+
+/** Borrar una transferencia periódica conserva las ya hechas. */
+export const deleteRecurringTransfer = (finance, id) => ({ ...finance, recurringTransfers: (finance.recurringTransfers || []).filter((x) => x.id !== id) });
 
 // ── Saldos
 
@@ -240,28 +264,67 @@ export function payPeriod(finance, key) {
 const inRange = (t, from, to) => t.date >= from && t.date <= to;
 const sumOf = (list) => list.reduce((a, t) => a + t.amount, 0);
 
+/** Cuentas de reserva (ahorro intocable): su dinero no es para el día a día. */
+export const reserveIds = (finance) => new Set(finance.accounts.filter((a) => a.reserve).map((a) => a.id));
+export const spendingBalance = (finance) => {
+  const bal = accountBalances(finance);
+  const res = reserveIds(finance);
+  return finance.accounts.filter((a) => !res.has(a.id)).reduce((s, a) => s + (bal[a.id] ?? 0), 0);
+};
+export const reserveBalance = (finance) => {
+  const bal = accountBalances(finance);
+  return finance.accounts.filter((a) => a.reserve).reduce((s, a) => s + (bal[a.id] ?? 0), 0);
+};
+
 /**
- * Resumen del periodo de cobro actual: lo ingresado, lo gastado y cuánto queda por día
- * hasta el siguiente cobro (incluido hoy).
+ * Resumen del periodo de cobro actual: el dinero del periodo, lo gastado y cuánto queda por
+ * día hasta el siguiente cobro (incluido hoy).
+ *
+ * Dinero del periodo (`funds`) = ingresos en cuentas de gasto + lo pasado desde una cuenta de
+ * reserva + lo PENDIENTE (`expected`): cobros con importe aún sin registrar y transferencias
+ * periódicas desde la reserva que tocan este periodo y aún no se han hecho. Así el periodo no
+ * sale en negativo solo porque el dinero aún no se ha movido. Un ingreso que llega a la reserva
+ * no cuenta (no es para gastar), y lo que pasas a la reserva (`saved`) resta. Los gastos y
+ * fijos pagados desde la reserva no cuentan contra el periodo.
  */
 export function periodSummary(finance, today) {
   const p = payPeriod(finance, today);
+  const res = reserveIds(finance);
+  const spend = (id) => !res.has(id);
   const txs = finance.transactions.filter((t) => inRange(t, p.start, p.end));
-  const income = sumOf(txs.filter((t) => t.type === 'income'));
-  const expenses = sumOf(txs.filter((t) => t.type === 'expense'));
+  const income = sumOf(txs.filter((t) => t.type === 'income' && spend(t.accountId)));
+  const fromReserve = sumOf(txs.filter((t) => t.type === 'transfer' && !spend(t.accountId) && spend(t.toAccountId)));
+  const saved = sumOf(txs.filter((t) => t.type === 'transfer' && spend(t.accountId) && !spend(t.toAccountId)));
+  const expenses = sumOf(txs.filter((t) => t.type === 'expense' && spend(t.accountId)));
+
+  // Dinero que llegará este periodo y aún no está registrado
+  const since = finance.since > p.start ? finance.since : p.start;
+  const pendingItems = [
+    ...paydayDates(finance, since, p.end)
+      .filter(({ payday }) => payday.amount && (!payday.accountId || spend(payday.accountId)))
+      .filter(({ key, payday }) => !finance.transactions.some((t) => t.type === 'income' && t.paydayId === payday.id && Math.abs(diffDays(key, t.date)) <= 5))
+      .map(({ key, payday }) => ({ kind: 'payday', key, amount: payday.amount })),
+    ...transferDueDates(finance, p.start, p.end)
+      .filter(({ rt }) => !spend(rt.fromAccountId) && spend(rt.toAccountId))
+      .filter(({ key, rt }) => !transferMade(finance, rt, key))
+      .map(({ key, rt }) => ({ kind: 'transfer', key, amount: rt.amount, rt })),
+  ];
+  const expected = sumOf(pendingItems);
+  const received = income + fromReserve;
+  const funds = received + expected;
+
   const opening = paydayDates(finance, p.start, p.start)[0]?.payday; // el cobro que abre el periodo
-  const expected = opening?.amount ?? null;
   const daysLeft = diffDays(today, p.end) + 1;
-  const left = income - expenses;
+  const left = funds - expenses - saved;
   const elapsed = diffDays(p.start, today) + 1;
-  // Gastos fijos de este periodo aún sin pagar (vencidos o por venir): ese dinero ya tiene dueño
-  const pendingFixed = fixedDues(finance, p.start, p.end).filter((d) => !d.paid);
+  // Gastos fijos de este periodo aún sin pagar (vencidos o por venir) desde cuentas de gasto: ese dinero ya tiene dueño
+  const pendingFixed = fixedDues(finance, p.start, p.end).filter((d) => !d.paid && spend(d.cost.accountId));
   const committed = sumOf(pendingFixed);
   const free = left - committed;
   return {
-    ...p, income, expenses, left, committed, pendingFixed, free, daysLeft,
+    ...p, income, fromReserve, saved, received, expected, pendingItems, funds, expenses, left, committed, pendingFixed, free, daysLeft,
     perDay: daysLeft > 0 ? Math.floor(free / daysLeft) : free,
-    elapsed, length: diffDays(p.start, p.end) + 1, expected, opening,
+    elapsed, length: diffDays(p.start, p.end) + 1, opening,
   };
 }
 
@@ -311,6 +374,42 @@ export const monthlyIncomeExpected = (finance) => finance.paydays.reduce((a, p) 
 /** Gasto que crea "Pagado": en la fecha de vencimiento (o hoy si aún no ha llegado). */
 export function fixedCostPayment(cost, key, today) {
   return { type: 'expense', amount: cost.amount, date: key <= today ? key : today, accountId: cost.accountId, categoryId: cost.categoryId, note: cost.name, fixedCostId: cost.id };
+}
+
+// ── Transferencias periódicas entre cuentas
+
+/** Fechas en que toca cada transferencia periódica (desde su alta; días > fin de mes se recortan). */
+export function transferDueDates(finance, from, to) {
+  const out = [];
+  const start = fromKey(from);
+  const end = fromKey(to);
+  for (let y = start.getFullYear(), m = start.getMonth(); y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth()); m === 11 ? (y++, m = 0) : m++) {
+    for (const rt of finance.recurringTransfers || []) {
+      for (const day of rt.days) {
+        const key = paydayIn(y, m, day);
+        if (key >= from && key <= to && key >= rt.createdAt) out.push({ key, rt });
+      }
+    }
+  }
+  return out.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+/**
+ * Transferencia ya hecha para una fecha: una transferencia con su recurringId a ±5 días
+ * (menos margen que los gastos fijos: hay fechas cada ~15 días y no deben solaparse).
+ */
+export function transferMade(finance, rt, key) {
+  return finance.transactions.find((t) => t.type === 'transfer' && t.recurringId === rt.id && Math.abs(diffDays(key, t.date)) <= 5) || null;
+}
+
+/** Las que tocaban hasta hoy y no se han hecho (máx. 30 días atrás). */
+export function pendingTransfers(finance, today) {
+  return transferDueDates(finance, addDays(today, -30), today).filter(({ key, rt }) => !transferMade(finance, rt, key));
+}
+
+/** La transferencia que crea "Hecho": en la fecha que tocaba. */
+export function recurringTransferTx(rt, key, today) {
+  return { type: 'transfer', amount: rt.amount, date: key <= today ? key : today, accountId: rt.fromAccountId, toAccountId: rt.toAccountId, note: rt.name || 'Transferencia periódica', recurringId: rt.id };
 }
 
 // ── Meses y categorías
@@ -408,9 +507,15 @@ export function recentExpenses(finance, n = 4) {
 export function pendingPaydays(finance, today) {
   const from = finance.since > addDays(today, -45) ? finance.since : addDays(today, -45);
   if (from > today) return [];
-  return paydayDates(finance, from, today).filter(({ key, payday }) => !finance.transactions.some(
-    (t) => t.type === 'income' && t.paydayId === payday.id && Math.abs(diffDays(key, t.date)) <= 5,
-  ));
+  // Un cobro sin importe que coincide con una transferencia periódica desde la reserva solo
+  // marca el periodo: el dinero llega con esa transferencia, así que no se pide registrarlo.
+  const res = reserveIds(finance);
+  const fromReserveOn = (key) => transferDueDates(finance, key, key).some(({ rt }) => res.has(rt.fromAccountId) && !res.has(rt.toAccountId));
+  return paydayDates(finance, from, today)
+    .filter(({ key, payday }) => payday.amount || !fromReserveOn(key))
+    .filter(({ key, payday }) => !finance.transactions.some(
+      (t) => t.type === 'income' && t.paydayId === payday.id && Math.abs(diffDays(key, t.date)) <= 5,
+    ));
 }
 
 // ── Mensajes con cifras concretas (mismo formato que domain/messages.js)
@@ -423,15 +528,16 @@ export function financeMessages(finance, today) {
   const p = periodSummary(finance, today);
   const nextLabel = fromKey(p.next).toLocaleDateString('es', { day: 'numeric', month: 'short' });
   const days = (n) => `${n} ${n === 1 ? 'día' : 'días'}`;
-  if (p.income > 0) {
+  const pend = p.expected > 0 ? ` (cuenta ${money(p.expected)} aún por ${p.pendingItems.some((x) => x.kind === 'transfer') ? 'pasar desde tu reserva' : 'cobrar'})` : '';
+  if (p.funds > 0) {
     if (p.left >= 0 && p.committed > 0) {
       const names = p.pendingFixed.map((d) => `${d.cost.name} ${money(d.amount)}`).join(', ');
-      push(p.free < 0 ? 'risk' : p.perDay < p.income / p.length / 2 ? 'risk' : 'goal', 80, p.free >= 0
-        ? `Te quedan ${money(p.left)} hasta el cobro del ${nextLabel}; tras los fijos pendientes (${names}), ${money(p.perDay)} al día durante ${days(p.daysLeft)}.`
+      push(p.free < 0 ? 'risk' : p.perDay < p.funds / p.length / 2 ? 'risk' : 'goal', 80, p.free >= 0
+        ? `Te quedan ${money(p.left)} hasta el cobro del ${nextLabel}${pend}; tras los fijos pendientes (${names}), ${money(p.perDay)} al día durante ${days(p.daysLeft)}.`
         : `Te quedan ${money(p.left)} hasta el ${nextLabel}, pero tienes ${money(p.committed)} en fijos pendientes (${names}): faltan ${money(-p.free)}.`);
     } else if (p.left >= 0) {
-      push(p.perDay < p.income / p.length / 2 ? 'risk' : 'goal', 80,
-        `Te quedan ${money(p.left)} hasta el cobro del ${nextLabel}: ${money(p.perDay)} al día durante ${days(p.daysLeft)}.`);
+      push(p.perDay < p.funds / p.length / 2 ? 'risk' : 'goal', 80,
+        `Te quedan ${money(p.left)} hasta el cobro del ${nextLabel}${pend}: ${money(p.perDay)} al día durante ${days(p.daysLeft)}.`);
     } else {
       push('risk', 90, `Llevas ${money(-p.left)} gastados por encima de lo que ingresaste este periodo, y faltan ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'} para el ${nextLabel}.`);
     }

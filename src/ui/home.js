@@ -79,8 +79,8 @@ export function homeView(state, ctx) {
       h('a', { class: 'card home-tile', href: '#/finanzas' },
         h('div', { class: 'tile-head' }, h('h2', {}, 'Finanzas'), h('span', { class: 'tile-go', 'aria-hidden': 'true' }, '›')),
         hasFinance ? h('div', { class: 'tile-stack' },
-          h('b', { class: `tile-big ${p.income && p.free < 0 ? 'neg' : ''}` }, p.income ? money(p.free) : money(-p.expenses)),
-          h('p', { class: 'muted small' }, p.income ? `para gastar · ${money(p.perDay)} al día · cobro en ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'}` : 'gastado este periodo'),
+          h('b', { class: `tile-big ${p.funds && p.free < 0 ? 'neg' : ''}` }, p.funds ? money(p.free) : money(-p.expenses)),
+          h('p', { class: 'muted small' }, p.funds ? `para gastar · ${money(p.perDay)} al día · cobro en ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'}${p.expected ? ` · incluye ${money(p.expected)} pendientes` : ''}` : 'gastado este periodo'),
           dueFixed.length || duePay.length ? h('p', { class: 'small warn' }, [
             duePay.length ? `${duePay.length} cobro${duePay.length === 1 ? '' : 's'} por registrar` : null,
             dueFixed.length ? `${dueFixed.length} gasto${dueFixed.length === 1 ? '' : 's'} fijo${dueFixed.length === 1 ? '' : 's'} por pagar` : null,
