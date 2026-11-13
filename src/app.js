@@ -9,6 +9,7 @@ import { isDone } from './domain/habits.js';
 import { h, hideTip, toast } from './ui/dom.js';
 import { confetti } from './ui/confetti.js';
 import { initTheme } from './ui/theme.js';
+import { initSwipe } from './ui/swipe.js';
 import { backupOverdue, requestPersistentStorage } from './backup.js';
 import { todayView } from './ui/today.js';
 import { habitFormView } from './ui/habitForm.js';
@@ -289,6 +290,25 @@ if (!location.hash) {
 initTheme();
 markEnter();
 render();
+
+// Deslizar a los lados para cambiar de sección (táctil). La nueva vista entra por el lado
+// del gesto (main[data-swipe]); se va a la portada de cada sección.
+initSwipe({
+  el: main,
+  order: SECTIONS.map(([id]) => id),
+  current: () => sectionOf((location.hash || '#/').split('?')[0]),
+  goTo: (id, dir) => {
+    main.dataset.swipe = dir > 0 ? 'next' : 'prev';
+    clearTimeout(initSwipe.t);
+    initSwipe.t = setTimeout(() => delete main.dataset.swipe, 450);
+    ctx.go(SECTIONS.find(([s]) => s === id)[1]);
+  },
+});
+// Una sola vez en pantallas táctiles: avisar de que se puede deslizar
+if (matchMedia('(pointer: coarse)').matches && !localStorage.getItem('panel.swipeHint')) {
+  localStorage.setItem('panel.swipeHint', '1');
+  setTimeout(() => toast('Desliza a los lados para cambiar de sección', { timeout: 4000 }), 1200);
+}
 // Que el navegador no borre los datos por falta de espacio (en la app instalada suele concederse)
 requestPersistentStorage();
 if (oauth?.ok) ctx.refreshInbox();

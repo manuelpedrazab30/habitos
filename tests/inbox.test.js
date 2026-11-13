@@ -60,3 +60,13 @@ test('inbox: facturas ya registradas en Finanzas y avisos concretos', () => {
   ok(texts.some((t) => t.startsWith('2 facturas o pagos (250,55') && t.includes('no están en tus gastos')), JSON.stringify(texts));
   ok(texts.some((t) => t.includes('«Recordatorio de cita» es mañana')), JSON.stringify(texts));
 });
+test('inbox: versiones cortas para el Inicio y sin fechas ya pasadas', () => {
+  const { me, messages } = demoInbox(NOW);
+  const later = digest(messages, { me, today: '2026-11-13' }); // viernes: el jueves 12 ya pasó
+  ok(later.deadlines.every((m) => m.deadline.key >= '2026-11-13'), JSON.stringify(later.deadlines.map((m) => m.deadline.key)));
+  const msgs = inboxMessages(later, { today: '2026-11-13' });
+  ok(!msgs.some((m) => m.text.includes('Presupuesto de la reforma')), 'la fecha del jueves no aparece el viernes');
+  const reply = msgs.find((m) => m.text.includes('esperan tu respuesta'));
+  eq(reply.short, '3 correos por responder · Ana Ruiz, hace 4 días');
+  ok(msgs.every((m) => !m.short || m.short.length <= 60), JSON.stringify(msgs.map((m) => m.short)));
+});

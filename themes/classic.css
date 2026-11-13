@@ -1,0 +1,87 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tema "Clásico": la base de styles.css (amarillo claro) más un toque del estilo
+   holográfico, en suave: rejilla y anillos girando de fondo, entrada animada de las
+   tarjetas y los colores de hábitos/categorías llevados a la gama del tema.
+   Funciona en claro y en oscuro (sigue al sistema). Iconos de línea en vez de emojis
+   (src/ui/symbols.js; THEMES.classic.symbols).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+html[data-theme="classic"] {
+  --line: color-mix(in srgb, var(--accent) 22%, transparent);
+  --line-faint: color-mix(in srgb, var(--accent) 9%, transparent);
+  --sym-mix: 62%; /* claro: iconos amarillos mezclados con el texto para que se lean sobre blanco */
+  --confetti: #f5cd47, #ffe08a, #e0a526, #10b981, #ef4444;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="classic"] { --sym-mix: 100%; --line: color-mix(in srgb, var(--accent) 16%, transparent); --line-faint: color-mix(in srgb, var(--accent) 6%, transparent); }
+}
+
+/* ── Fondo: resplandor amarillo, rejilla fina y anillos girando (como en Dorado, más sutil) */
+html[data-theme="classic"] body {
+  background:
+    radial-gradient(1000px 480px at 50% -14%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 62%),
+    linear-gradient(var(--line-faint) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, var(--line-faint) 1px, transparent 1px) 0 0 / 40px 40px,
+    var(--bg);
+  background-attachment: fixed;
+}
+html[data-theme="classic"] body::after {
+  content: ""; position: fixed; z-index: -1; pointer-events: none;
+  width: 720px; height: 720px; right: -300px; top: -250px; border-radius: 50%;
+  border: 1px dashed var(--line);
+  box-shadow: 0 0 0 44px var(--line-faint), inset 0 0 0 88px var(--line-faint);
+  outline: 2px dotted var(--line); outline-offset: 66px;
+  animation: classic-spin 120s linear infinite;
+}
+html[data-theme="classic"] body::before { /* segundo juego de anillos, abajo a la izquierda, girando al revés */
+  content: ""; position: fixed; z-index: -1; pointer-events: none;
+  width: 520px; height: 520px; left: -260px; bottom: -200px; border-radius: 50%;
+  border: 1px dashed var(--line-faint);
+  outline: 1px dotted var(--line); outline-offset: 40px;
+  animation: classic-spin 160s linear infinite reverse;
+}
+@keyframes classic-spin { to { transform: rotate(360deg); } }
+/* Las superficies, un pelo translúcidas para que se intuya el fondo */
+html[data-theme="classic"] .card,
+html[data-theme="classic"] .habit-card,
+html[data-theme="classic"] .msg {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+html[data-theme="classic"] .topbar { box-shadow: 0 1px 0 var(--line); }
+html[data-theme="classic"] .level-badge { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+/* ── Entrada de las tarjetas al cambiar de vista (app.js pone main.enter solo en cambios de ruta) */
+html[data-theme="classic"] main.enter .view > * { animation: classic-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+html[data-theme="classic"] main.enter .view > *:nth-child(2) { animation-delay: 0.05s; }
+html[data-theme="classic"] main.enter .view > *:nth-child(3) { animation-delay: 0.1s; }
+html[data-theme="classic"] main.enter .view > *:nth-child(4) { animation-delay: 0.15s; }
+html[data-theme="classic"] main.enter .view > *:nth-child(5) { animation-delay: 0.2s; }
+html[data-theme="classic"] main.enter .view > *:nth-child(n + 6) { animation-delay: 0.25s; }
+/* También las tarjetas dentro de listas y rejillas (hábitos, inicio, movimientos), en cascada */
+html[data-theme="classic"] main.enter :is(.habit-list, .home-grid, .kpis) > * { animation: classic-in 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(0.12s + var(--i, 0) * 0.05s); }
+html[data-theme="classic"] main.enter :is(.habit-list, .home-grid, .kpis) > :nth-child(2) { --i: 1; }
+html[data-theme="classic"] main.enter :is(.habit-list, .home-grid, .kpis) > :nth-child(3) { --i: 2; }
+html[data-theme="classic"] main.enter :is(.habit-list, .home-grid, .kpis) > :nth-child(4) { --i: 3; }
+html[data-theme="classic"] main.enter :is(.habit-list, .home-grid, .kpis) > :nth-child(n + 5) { --i: 4; }
+@keyframes classic-in {
+  0% { opacity: 0; transform: translateY(12px) scale(0.985); filter: blur(3px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+
+/* ── Colores de hábitos y categorías: el morado/violeta pasa a la gama amarilla del tema */
+html[data-theme="classic"] [style*="--c: #6366f1"] { --c: #f5cd47 !important; }
+html[data-theme="classic"] [style*="--c: #8b5cf6"] { --c: #e0a526 !important; }
+html[data-theme="classic"] .swatch[style*="rgb(99, 102, 241)"] { background: #f5cd47 !important; }
+html[data-theme="classic"] .swatch[style*="rgb(139, 92, 246)"] { background: #e0a526 !important; }
+html[data-theme="classic"] .msg.insight { border-left-color: #e0a526; }
+
+/* ── Iconos (en vez de emojis): color del hábito/categoría o del tema, legible en claro */
+html[data-theme="classic"] .sym { color: color-mix(in srgb, var(--c, var(--accent)) var(--sym-mix), var(--text)); }
+html[data-theme="classic"] :is(.habit-card .emoji, .detail-head .emoji, .cat-pick, .tx-icon) .sym svg { stroke-width: 1.9; }
+html[data-theme="classic"] .sym-fallback { color: transparent; text-shadow: 0 0 0 color-mix(in srgb, var(--c, var(--accent)) var(--sym-mix), var(--text)); }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="classic"] body::after, html[data-theme="classic"] body::before { animation: none; }
+}

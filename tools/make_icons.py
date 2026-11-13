@@ -1,8 +1,8 @@
 """Genera los iconos PNG de la app (pantalla de inicio de iPhone, Android, favicon).
 
 Sin dependencias: dibuja con campos de distancia (antialiasing analítico) y escribe
-PNG con zlib. Diseño: fondo degradado índigo→violeta, anillo de progreso (como el de
-la vista Hoy) y un check. iOS redondea las esquinas, así que el fondo llega al borde.
+PNG con zlib. Diseño: fondo degradado amarillo claro→ámbar, anillo de progreso (como el de
+la vista Hoy) y un check en marrón oscuro (contraste sobre amarillo). iOS redondea las esquinas, así que el fondo llega al borde.
 
 Uso: python3 tools/make_icons.py   → icons/icon-{180,192,512}.png
 """
@@ -11,9 +11,9 @@ import struct
 import zlib
 from pathlib import Path
 
-TOP = (99, 102, 241)  # #6366f1
-BOTTOM = (139, 92, 246)  # #8b5cf6
-WHITE = (255, 255, 255)
+TOP = (255, 226, 130)  # amarillo claro
+BOTTOM = (240, 182, 52)  # ámbar
+GLYPH = (42, 31, 0)  # #2a1f00, el mismo tono que --accent-ink
 ARC_START = -90  # grados, 0 = derecha; empieza arriba
 ARC_SWEEP = 285  # grados de anillo "completado"
 
@@ -58,10 +58,10 @@ def render(size):
             chk = min(seg_dist(px, py, *check[0], *check[1]), seg_dist(px, py, *check[1], *check[2])) - check_w / 2
 
             col = bg
-            for sdf, alpha in ((ring, 0.22), (arc, 1.0), (chk, 1.0)):
+            for sdf, alpha in ((ring, 0.18), (arc, 1.0), (chk, 1.0)):
                 cov = clamp(0.5 - sdf) * alpha
                 if cov:
-                    col = [c + (w - c) * cov for c, w in zip(col, WHITE)]
+                    col = [c + (w - c) * cov for c, w in zip(col, GLYPH)]
             row += bytes(int(round(c)) for c in col)
         rows.append(bytes(row))
     return b"".join(rows)

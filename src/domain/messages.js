@@ -99,25 +99,26 @@ export function overloadMessages(habit, workouts = {}, today) {
     const lead = ready.length === 1
       ? `${ready[0].exercise.name}: completaste ${setLabel(ready[0].last, fmt)}. Prueba ${fmt(ready[0].suggestion)} kg en la próxima sesión.`
       : `toca subir peso en ${ready.length} ejercicios: ${list}.`;
-    out.push({ kind: 'today', priority: 72, text: `${name}: ${lead}` });
+    out.push({ kind: 'today', priority: 72, text: `${name}: ${lead}`, short: ready.length === 1 ? `${name}: sube ${ready[0].exercise.name} a ${fmt(ready[0].suggestion)} kg` : `${name}: sube peso en ${ready.length} ejercicios` });
   }
 
   stats.filter((st) => st.stalled && st.suggestion === null).slice(0, 2).forEach((st) => {
     out.push({
       kind: 'risk', priority: 60,
       text: `${name}: ${st.exercise.name} lleva ${st.atWeight} sesiones en ${fmt(st.last.weight)} kg sin subir. Prueba ${fmt(st.last.weight + WEIGHT_STEP)} kg aunque hagas menos reps, o añade una serie.`,
+      short: `${st.exercise.name}: estancado en ${fmt(st.last.weight)} kg (${st.atWeight} sesiones)`,
     });
   });
 
   const recentPR = stats.filter((st) => st.isPR && st.last.key >= addDays(today, -3));
   if (recentPR.length) {
-    out.push({ kind: 'streak', priority: 45, text: `${name}: récord reciente en ${recentPR.map((st) => `${st.exercise.name} (${fmt(st.best)} kg)`).join(', ')}.` });
+    out.push({ kind: 'streak', priority: 45, text: `${name}: récord reciente en ${recentPR.map((st) => `${st.exercise.name} (${fmt(st.best)} kg)`).join(', ')}.`, short: `Récord: ${recentPR[0].exercise.name} ${fmt(recentPR[0].best)} kg` });
   }
 
   const gains = stats.filter((st) => st.change4w > 0).sort((a, b) => b.change4w / b.last.weight - a.change4w / a.last.weight);
   if (gains.length) {
     const g = gains[0];
-    out.push({ kind: 'insight', priority: 34, text: `${name}: ${g.exercise.name} subió ${fmt(g.change4w)} kg en las últimas 4 semanas (ahora ${fmt(g.last.weight)} kg).` });
+    out.push({ kind: 'insight', priority: 34, text: `${name}: ${g.exercise.name} subió ${fmt(g.change4w)} kg en las últimas 4 semanas (ahora ${fmt(g.last.weight)} kg).`, short: `${g.exercise.name}: +${fmt(g.change4w)} kg en 4 semanas` });
   }
   return out.map((m, i) => ({ id: `${habit.id}:overload:${i}`, habitId: habit.id, ...m }));
 }
@@ -126,31 +127,35 @@ export function habitMessages(habit, log = {}, today, workouts = {}) {
   const out = [];
   const name = `${habit.emoji} ${habit.name}`;
   // topic: 'week' = estado de la semana en hábitos N/semana (Hoy no lo muestra: ya lo dice la tira de días)
-  const push = (kind, priority, text, topic = null) => out.push({ id: `${habit.id}:${kind}:${out.length}`, habitId: habit.id, kind, priority, text, topic });
+  // short: versión de una línea para el Inicio
+  const push = (kind, priority, text, topic = null, short = null) => out.push({ id: `${habit.id}:${kind}:${out.length}`, habitId: habit.id, kind, priority, text, topic, short });
 
   // Meta con plazo
   if (habit.kind === 'target' && habit.goal.value !== null && habit.goal.start !== null) {
     const p = targetProjection(habit, log, today);
-    push('goal', p.onTrack === false ? 80 : 60, `${name}: ${targetMessage(habit, p, today)}`);
+    push('goal', p.onTrack === false ? 80 : 60, `${name}: ${targetMessage(habit, p, today)}`, null,
+      p.reached ? `${name}: objetivo alcanzado` : `${name}: faltan ${withUnit(Math.abs(p.remaining), habit.unit)}${p.onTrack === false ? ' · vas tarde' : p.etaKey ? ` · llegas el ${formatDate(p.etaKey)}` : ''}`);
     const last = p.measurements[p.measurements.length - 1];
     const expectedGap = habit.schedule.type === 'weekly' ? Math.ceil(7 / habit.schedule.times) : 1;
     if (last && !p.reached) {
       const since = diffDays(last.key, today);
-      if (since > expectedGap + 1) push('risk', 70, `${name}: tu última medición fue hace ${days(since)}; sin datos nuevos la proyección se queda desfasada.`);
+      if (since > expectedGap + 1) push('risk', 70, `${name}: tu última medición fue hace ${days(since)}; sin datos nuevos la proyección se queda desfasada.`, null, `${name}: sin medir desde hace ${days(since)}`);
     }
   } else if (habit.kind === 'check' && habit.goal.deadline) {
     const p = durationProgress(habit, log, today);
     const tight = !p.reached && !p.failed && p.remaining - p.needed <= 1;
-    push('goal', tight ? 80 : 55, `${name}: ${durationMessage(habit, p)}`);
+    push('goal', tight ? 80 : 55, `${name}: ${durationMessage(habit, p)}`, null,
+      `${name}: ${p.met}/${p.total} ${p.unit}s${p.reached ? ' · meta asegurada' : p.failed ? ' · ya no llegas al 80%' : tight ? ' · sin margen' : ''}`);
   } else if (habit.kind === 'count' && habit.goal.total) {
     const p = totalProjection(habit, log, today);
-    push('goal', p.onTrack === false ? 80 : 55, `${name}: ${totalMessage(habit, p)}`);
+    push('goal', p.onTrack === false ? 80 : 55, `${name}: ${totalMessage(habit, p)}`, null,
+      p.reached ? `${name}: meta cumplida` : `${name}: ${pct(p.progress)} de ${withUnit(p.total, habit.unit)}${p.onTrack === false ? ' · vas tarde' : ''}`);
   }
 
   // Lo que falta hoy en hábitos de cantidad
   const todayVal = log[today];
   if (habit.kind === 'count' && isScheduled(habit, today) && todayVal > 0 && !isDone(habit, todayVal)) {
-    push('today', 75, `${name}: te faltan ${withUnit(habit.dailyGoal - todayVal, habit.unit)} para la meta de hoy.`);
+    push('today', 75, `${name}: te faltan ${withUnit(habit.dailyGoal - todayVal, habit.unit)} para la meta de hoy.`, null, `${name}: faltan ${withUnit(habit.dailyGoal - todayVal, habit.unit)} hoy`);
   }
 
   // Rachas
@@ -170,10 +175,10 @@ export function habitMessages(habit, log = {}, today, workouts = {}) {
   } else if (s.pending) {
     const next = s.current + 1;
     const milestone = STREAK_MILESTONES.find((m) => m >= next);
-    if (s.best > 1 && next === s.best) push('streak', 90, `${name}: si lo completas hoy igualas tu mejor racha (${streakLabel(s.best, 'día')}).`);
-    else if (s.best > 1 && next === s.best + 1) push('streak', 95, `${name}: hoy puedes batir tu récord y llegar a ${streakLabel(next, 'día')} seguidos.`);
-    else if (milestone && milestone - next <= 2 && s.current >= 3) push('streak', 65, `${name}: ${milestone === next ? 'hoy llegas' : `a ${days(milestone - next + 1)} de llegar`} a ${milestone} días seguidos.`);
-    else if (s.current >= 3) push('streak', 40, `${name}: racha de ${streakLabel(s.current, 'día')} en juego hoy.`);
+    if (s.best > 1 && next === s.best) push('streak', 90, `${name}: si lo completas hoy igualas tu mejor racha (${streakLabel(s.best, 'día')}).`, null, `${name}: hoy igualas tu récord (${s.best} días)`);
+    else if (s.best > 1 && next === s.best + 1) push('streak', 95, `${name}: hoy puedes batir tu récord y llegar a ${streakLabel(next, 'día')} seguidos.`, null, `${name}: hoy bates tu récord (${next} días)`);
+    else if (milestone && milestone - next <= 2 && s.current >= 3) push('streak', 65, `${name}: ${milestone === next ? 'hoy llegas' : `a ${days(milestone - next + 1)} de llegar`} a ${milestone} días seguidos.`, null, `${name}: ${milestone === next ? 'hoy' : `a ${days(milestone - next + 1)} de`} ${milestone} días seguidos`);
+    else if (s.current >= 3) push('streak', 40, `${name}: racha de ${streakLabel(s.current, 'día')} en juego hoy.`, null, `${name}: racha de ${s.current} días en juego`);
   }
 
   return out.concat(overloadMessages(habit, workouts, today));
@@ -186,7 +191,7 @@ export function globalMessages(state, today) {
   // Nivel: traducir la XP que falta a acciones concretas
   const lv = levelInfo(totalXp(state, today));
   const actions = Math.ceil(lv.toNext / (XP.base + XP.streakStep * 2));
-  out.push({ id: 'level', kind: 'level', priority: lv.toNext <= 30 ? 70 : 20, text: `Te faltan ${lv.toNext} XP para el nivel ${lv.level + 1}: unos ${plural(actions, 'registro cumplido', 'registros cumplidos')}.` });
+  out.push({ id: 'level', kind: 'level', priority: lv.toNext <= 30 ? 70 : 20, text: `Te faltan ${lv.toNext} XP para el nivel ${lv.level + 1}: unos ${plural(actions, 'registro cumplido', 'registros cumplidos')}.`, short: `Faltan ${lv.toNext} XP para el nivel ${lv.level + 1}` });
 
   // Día de la semana más débil (con al menos ~3 semanas de datos)
   const wr = weekdayRates(habits, state.entries, addDays(today, -55), today, today);
@@ -196,7 +201,7 @@ export function globalMessages(state, today) {
     const others = withData.filter((r) => r.i !== worst.i);
     const avg = others.reduce((a, r) => a + r.done, 0) / Math.max(1, others.reduce((a, r) => a + r.expected, 0));
     if (avg - worst.rate >= 0.2) {
-      out.push({ id: 'weekday', kind: 'insight', priority: 35, text: `Los ${WEEKDAYS[worst.i]}${worst.i >= 5 ? 's' : ''} cumples el ${pct(worst.rate)} de lo programado; el resto de días, el ${pct(avg)}. Es tu punto más flojo de la semana.` });
+      out.push({ id: 'weekday', kind: 'insight', priority: 35, text: `Los ${WEEKDAYS[worst.i]}${worst.i >= 5 ? 's' : ''} cumples el ${pct(worst.rate)} de lo programado; el resto de días, el ${pct(avg)}. Es tu punto más flojo de la semana.`, short: `Los ${WEEKDAYS[worst.i]}${worst.i >= 5 ? 's' : ''} cumples solo el ${pct(worst.rate)}` });
     }
   }
 
@@ -204,7 +209,7 @@ export function globalMessages(state, today) {
   const falling = improvementAreas(habits, state.entries, today).filter((r) => r.delta !== null && r.delta <= -0.2);
   if (falling.length) {
     const r = falling.reduce((a, b) => (b.delta < a.delta ? b : a));
-    out.push({ id: `drop:${r.habit.id}`, habitId: r.habit.id, kind: 'insight', priority: 38, text: `${r.habit.emoji} ${r.habit.name} bajó del ${pct(r.prev)} al ${pct(r.rate)} de cumplimiento en las últimas 4 semanas.` });
+    out.push({ id: `drop:${r.habit.id}`, habitId: r.habit.id, kind: 'insight', priority: 38, text: `${r.habit.emoji} ${r.habit.name} bajó del ${pct(r.prev)} al ${pct(r.rate)} de cumplimiento en las últimas 4 semanas.`, short: `${r.habit.emoji} ${r.habit.name}: bajó al ${pct(r.rate)} (antes ${pct(r.prev)})` });
   }
 
   return out.sort((a, b) => b.priority - a.priority);

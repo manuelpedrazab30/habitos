@@ -8,7 +8,7 @@ export const THEME_KEY = 'panel.theme';
 
 // symbols: sustituye los emojis por iconos de línea en el color del tema (ui/symbols.js)
 export const THEMES = [
-  { id: 'classic', label: 'Clásico', color: '#6366f1' },
+  { id: 'classic', label: 'Clásico', color: '#f5cd47', symbols: true },
   { id: 'hud', label: 'HUD · versión A', color: '#02070c' },
   { id: 'gold', label: 'Dorado · versión B', color: '#03060c', symbols: true },
 ];

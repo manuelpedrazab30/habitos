@@ -57,19 +57,11 @@ html[data-theme="gold"] .chart .line,
 html[data-theme="gold"] .chart .projection { stroke: rgb(var(--h-rgb)); }
 html[data-theme="gold"] .chart .dot { fill: rgb(var(--h2-rgb)); }
 
-/* ── Iconos de línea en lugar de emojis (src/ui/symbols.js) */
+/* ── Iconos de línea en lugar de emojis (base en styles.css; aquí, color y brillo dorado) */
 html[data-theme="gold"] .sym {
-  display: inline-flex; width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex: none;
   color: var(--c, rgb(var(--h-rgb)));
   filter: drop-shadow(0 0 4px rgba(var(--h-rgb), 0.55));
 }
-html[data-theme="gold"] .sym svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
-/* Emoji sin icono propio: silueta en el color del tema */
-html[data-theme="gold"] .sym-fallback { color: transparent; text-shadow: 0 0 0 var(--c, rgb(var(--h-rgb))); width: auto; height: auto; vertical-align: baseline; }
-html[data-theme="gold"] .emoji { display: inline-flex; align-items: center; justify-content: center; }
-html[data-theme="gold"] .emoji .sym { width: 1em; height: 1em; }
+html[data-theme="gold"] .sym-fallback { text-shadow: 0 0 0 var(--c, rgb(var(--h-rgb))); }
 html[data-theme="gold"] .habit-card .emoji .sym,
 html[data-theme="gold"] .detail-head .emoji .sym { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c, rgb(var(--h-rgb))) 70%, transparent)); }
-html[data-theme="gold"] .tx-icon .sym,
-html[data-theme="gold"] .cat-pick .sym { width: 0.95em; height: 0.95em; }
-html[data-theme="gold"] .nav .nav-item .sym { width: 1em; height: 1em; }

@@ -523,7 +523,8 @@ export function pendingPaydays(finance, today) {
 export function financeMessages(finance, today) {
   const out = [];
   const money = (c) => formatMoney(c, finance.currency);
-  const push = (kind, priority, text) => out.push({ id: `fin:${out.length}`, kind, priority, text });
+  // short: versión de una línea para el Inicio
+  const push = (kind, priority, text, short = null) => out.push({ id: `fin:${out.length}`, kind, priority, text, short });
 
   const p = periodSummary(finance, today);
   const nextLabel = fromKey(p.next).toLocaleDateString('es', { day: 'numeric', month: 'short' });
@@ -534,12 +535,15 @@ export function financeMessages(finance, today) {
       const names = p.pendingFixed.map((d) => `${d.cost.name} ${money(d.amount)}`).join(', ');
       push(p.free < 0 ? 'risk' : p.perDay < p.funds / p.length / 2 ? 'risk' : 'goal', 80, p.free >= 0
         ? `Te quedan ${money(p.left)} hasta el cobro del ${nextLabel}${pend}; tras los fijos pendientes (${names}), ${money(p.perDay)} al día durante ${days(p.daysLeft)}.`
-        : `Te quedan ${money(p.left)} hasta el ${nextLabel}, pero tienes ${money(p.committed)} en fijos pendientes (${names}): faltan ${money(-p.free)}.`);
+        : `Te quedan ${money(p.left)} hasta el ${nextLabel}, pero tienes ${money(p.committed)} en fijos pendientes (${names}): faltan ${money(-p.free)}.`,
+        p.free >= 0 ? `Quedan ${money(p.free)} · ${money(p.perDay)}/día hasta el ${nextLabel}` : `Faltan ${money(-p.free)} para cubrir tus fijos`);
     } else if (p.left >= 0) {
       push(p.perDay < p.funds / p.length / 2 ? 'risk' : 'goal', 80,
-        `Te quedan ${money(p.left)} hasta el cobro del ${nextLabel}${pend}: ${money(p.perDay)} al día durante ${days(p.daysLeft)}.`);
+        `Te quedan ${money(p.left)} hasta el cobro del ${nextLabel}${pend}: ${money(p.perDay)} al día durante ${days(p.daysLeft)}.`,
+        `Quedan ${money(p.free)} · ${money(p.perDay)}/día hasta el ${nextLabel}`);
     } else {
-      push('risk', 90, `Llevas ${money(-p.left)} gastados por encima de lo que ingresaste este periodo, y faltan ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'} para el ${nextLabel}.`);
+      push('risk', 90, `Llevas ${money(-p.left)} gastados por encima de lo que ingresaste este periodo, y faltan ${p.daysLeft} ${p.daysLeft === 1 ? 'día' : 'días'} para el ${nextLabel}.`,
+        `${money(-p.left)} gastados de más este periodo`);
     }
   }
 
@@ -548,27 +552,32 @@ export function financeMessages(finance, today) {
     const n = diffDays(today, d.key);
     const acc = finance.accounts.find((a) => a.id === d.cost.accountId);
     const emoji = finance.categories.find((c) => c.id === d.cost.categoryId)?.emoji || '📌';
-    push('today', 70, `${emoji} ${d.cost.name} (${money(d.amount)}) vence ${n === 1 ? 'mañana' : `en ${n} días`}${acc ? ` en ${acc.name}` : ''}.`);
+    push('today', 70, `${emoji} ${d.cost.name} (${money(d.amount)}) vence ${n === 1 ? 'mañana' : `en ${n} días`}${acc ? ` en ${acc.name}` : ''}.`,
+      `${emoji} ${d.cost.name}: ${money(d.amount)} ${n === 1 ? 'mañana' : `en ${n} días`}`);
   }
   const fixedMonthly = monthlyFixedTotal(finance);
   const incomeMonthly = monthlyIncomeExpected(finance);
   if (fixedMonthly > 0 && incomeMonthly > 0) {
-    push('insight', 30, `Tus gastos fijos suman ${money(fixedMonthly)} al mes: el ${Math.round((fixedMonthly / incomeMonthly) * 100)}% de lo que cobras. Te quedan ${money(incomeMonthly - fixedMonthly)} para el resto.`);
+    push('insight', 30, `Tus gastos fijos suman ${money(fixedMonthly)} al mes: el ${Math.round((fixedMonthly / incomeMonthly) * 100)}% de lo que cobras. Te quedan ${money(incomeMonthly - fixedMonthly)} para el resto.`,
+      `Fijos: ${Math.round((fixedMonthly / incomeMonthly) * 100)}% de lo que cobras`);
   }
 
   const m = monthSummary(finance, monthKeyOf(today), today);
   for (const r of m.categories) {
     if (!r.budget) continue;
     const daysLeft = m.days - m.dayOfMonth;
-    if (r.spent > r.budget) push('risk', 75, `${r.category.emoji} ${r.category.name}: ${money(r.spent - r.budget)} por encima del presupuesto de ${money(r.budget)}.`);
-    else if (r.spent >= r.budget * 0.8) push('today', 65, `${r.category.emoji} ${r.category.name}: llevas ${money(r.spent)} de ${money(r.budget)} y quedan ${daysLeft} días de mes; margen de ${money(r.budget - r.spent)}.`);
+    if (r.spent > r.budget) push('risk', 75, `${r.category.emoji} ${r.category.name}: ${money(r.spent - r.budget)} por encima del presupuesto de ${money(r.budget)}.`,
+      `${r.category.emoji} ${r.category.name}: ${money(r.spent - r.budget)} sobre presupuesto`);
+    else if (r.spent >= r.budget * 0.8) push('today', 65, `${r.category.emoji} ${r.category.name}: llevas ${money(r.spent)} de ${money(r.budget)} y quedan ${daysLeft} días de mes; margen de ${money(r.budget - r.spent)}.`,
+      `${r.category.emoji} ${r.category.name}: quedan ${money(r.budget - r.spent)} de presupuesto`);
   }
 
   if (m.prevSoFar !== null && m.prevSoFar > 0 && m.total > 0) {
     const diff = m.total - m.prevSoFar;
     const pctv = Math.round((Math.abs(diff) / m.prevSoFar) * 100);
     if (pctv >= 5) {
-      push('insight', 40, `Llevas ${money(m.total)} este mes, ${pctv}% ${diff < 0 ? 'menos' : 'más'} que a día ${m.dayOfMonth} del mes pasado (${money(m.prevSoFar)}).`);
+      push('insight', 40, `Llevas ${money(m.total)} este mes, ${pctv}% ${diff < 0 ? 'menos' : 'más'} que a día ${m.dayOfMonth} del mes pasado (${money(m.prevSoFar)}).`,
+        `Gasto del mes: ${diff < 0 ? '−' : '+'}${pctv}% vs. el mes pasado`);
     }
   }
 
@@ -578,7 +587,8 @@ export function financeMessages(finance, today) {
     .map((r) => ({ r, prev: prevM.categories.find((x) => x.category.id === r.category.id)?.spent || 0 }))
     .filter((x) => x.prev > 0 && x.r.spent > x.prev)
     .sort((a, b) => (b.r.spent - b.prev) - (a.r.spent - a.prev))[0];
-  if (grow) push('insight', 35, `${grow.r.category.emoji} ${grow.r.category.name} ya supera todo el mes pasado: ${money(grow.r.spent)} frente a ${money(grow.prev)}.`);
+  if (grow) push('insight', 35, `${grow.r.category.emoji} ${grow.r.category.name} ya supera todo el mes pasado: ${money(grow.r.spent)} frente a ${money(grow.prev)}.`,
+    `${grow.r.category.emoji} ${grow.r.category.name}: ya más que el mes pasado`);
 
   return out.sort((a, b) => b.priority - a.priority);
 }

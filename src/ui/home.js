@@ -58,7 +58,7 @@ export function homeView(state, ctx) {
       h('h2', {}, 'Lo importante ahora'),
       h('ul', { class: 'plain home-list' }, top.map((m) => h('li', {},
         h('a', { href: SOURCES[m.source][1], class: `src-tag src-${m.source}` }, SOURCES[m.source][0]),
-        h('span', {}, m.text),
+        h('span', {}, m.short || m.text), // versión corta: el detalle está en cada sección
       ))),
     ) : null,
 

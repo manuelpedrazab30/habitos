@@ -31,6 +31,8 @@ html:is([data-theme="hud"], [data-theme="gold"]) {
   --hud-faint: rgba(var(--h-rgb), 0.08);
   --amber: rgb(var(--amber-rgb));
   --accent: var(--hud);
+  --accent-text: var(--hud-strong);
+  --accent-ink: var(--on-fill);
   --good: rgb(var(--good-rgb));
   --bad: rgb(var(--bad-rgb));
   --border: rgba(var(--h-rgb), 0.22);

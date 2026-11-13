@@ -88,7 +88,7 @@ export function analyzeMessage(msg, { me = '', today }) {
   const amount = BILL_WORDS.test(t) ? findAmount(text) : null;
   const bill = amount && !code ? { amount } : null;
   const deadlineKey = findDeadline(text, mailKey);
-  const deadline = deadlineKey && deadlineKey >= addDays(today, -1) ? { key: deadlineKey, inDays: diffDays(today, deadlineKey) } : null;
+  const deadline = deadlineKey && deadlineKey >= today ? { key: deadlineKey, inDays: diffDays(today, deadlineKey) } : null; // solo hoy o futuras
   const asks = QUESTION.test(text) || REQUEST.test(t);
   const directToMe = Boolean(me) && msg.to.length === 1 && msg.to[0] === me.toLowerCase();
   const needsReply = !fromMe && !bulk && !automated && !code && asks;
@@ -145,30 +145,35 @@ export function digest(messages, { me = '', today, finance = null } = {}) {
 /** Avisos del correo con cifras concretas ({ kind, priority, text }), para el resumen y el Inicio. */
 export function inboxMessages(d, { today, currency = 'EUR' } = {}) {
   const out = [];
-  const push = (kind, priority, text, ref = null) => out.push({ id: `inbox:${out.length}`, kind, priority, text, ref, source: 'inbox' });
+  // short: versión de una línea para el Inicio
+  const push = (kind, priority, text, ref = null, short = null) => out.push({ id: `inbox:${out.length}`, kind, priority, text, ref, short, source: 'inbox' });
+  const clip = (t, n = 30) => (t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t);
+  const ago = (n) => (n === 0 ? 'hoy' : n === 1 ? 'ayer' : `hace ${n} días`);
   const days = (n) => (n === 0 ? 'hoy' : n === 1 ? 'desde ayer' : `desde hace ${n} días`);
 
   if (d.needsReply.length) {
     const oldest = d.needsReply[0];
     push('today', 82, d.needsReply.length === 1
       ? `${oldest.from.name} espera tu respuesta ${days(oldest.age)}: «${oldest.subject}».`
-      : `${d.needsReply.length} correos esperan tu respuesta; el más antiguo, de ${oldest.from.name}, ${days(oldest.age)}.`, oldest);
+      : `${d.needsReply.length} correos esperan tu respuesta; el más antiguo, de ${oldest.from.name}, ${days(oldest.age)}.`, oldest,
+      d.needsReply.length === 1 ? `Responder a ${oldest.from.name} (${ago(oldest.age)})` : `${d.needsReply.length} correos por responder · ${oldest.from.name}, ${ago(oldest.age)}`);
   }
-  for (const m of d.deadlines.filter((x) => x.deadline.inDays <= 3).slice(0, 2)) {
+  for (const m of d.deadlines.filter((x) => x.deadline.inDays >= 0 && x.deadline.inDays <= 3).slice(0, 2)) {
     const when = m.deadline.inDays === 0 ? 'es hoy' : m.deadline.inDays === 1 ? 'es mañana' : `es el ${formatDate(m.deadline.key, { weekday: 'long', day: 'numeric' })}`;
-    push('risk', 78, `Fecha en el correo de ${m.from.name}: «${m.subject}» ${when}.`, m);
+    const whenShort = m.deadline.inDays === 0 ? 'Hoy' : m.deadline.inDays === 1 ? 'Mañana' : formatDate(m.deadline.key, { weekday: 'short', day: 'numeric' }).replace(/^./, (c) => c.toUpperCase());
+    push('risk', 78, `Fecha en el correo de ${m.from.name}: «${m.subject}» ${when}.`, m, `${whenShort}: ${clip(m.subject)}`);
   }
   const pendingBills = d.bills.filter((m) => !m.bill.recorded);
   if (pendingBills.length === 1) {
     const m = pendingBills[0];
-    push('today', 74, `${m.from.name}: ${formatMoney(m.bill.amount, currency)} en «${m.subject}». No está en tus gastos.`, m);
+    push('today', 74, `${m.from.name}: ${formatMoney(m.bill.amount, currency)} en «${m.subject}». No está en tus gastos.`, m, `Factura sin registrar: ${formatMoney(m.bill.amount, currency)} · ${m.from.name}`);
   } else if (pendingBills.length > 1) {
     const sum = pendingBills.reduce((a, m) => a + m.bill.amount, 0);
-    push('today', 74, `${pendingBills.length} facturas o pagos (${formatMoney(sum, currency)}) que no están en tus gastos.`, pendingBills[0]);
+    push('today', 74, `${pendingBills.length} facturas o pagos (${formatMoney(sum, currency)}) que no están en tus gastos.`, pendingBills[0], `${pendingBills.length} facturas sin registrar · ${formatMoney(sum, currency)}`);
   }
   if (d.total >= 8 && d.bulk.length / d.total >= 0.4) {
     const top = d.topSenders[0];
-    push('insight', 30, `${d.bulk.length} de ${d.total} correos son promociones o boletines${top ? `; quien más envía: ${top.name} (${top.count})` : ''}.`);
+    push('insight', 30, `${d.bulk.length} de ${d.total} correos son promociones o boletines${top ? `; quien más envía: ${top.name} (${top.count})` : ''}.`, null, `${d.bulk.length} de ${d.total} correos son publicidad`);
   }
   return out.sort((a, b) => b.priority - a.priority);
 }
