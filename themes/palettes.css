@@ -1,0 +1,62 @@
+/* Paletas de color: la misma estructura que el Clásico (themes/classic.css) con otros colores y fondos.
+   Cada una sigue al sistema en claro y oscuro. Una paleta nueva = otro bloque aquí + su id en el :is(...) de classic.css. */
+
+/* Océano · azul */
+html[data-theme="ocean"] {
+  --bg: #eef4fb; --surface: #ffffff; --surface-2: #e4edf8; --border: #d5e1f0;
+  --text: #10192b; --muted: #5d6c85;
+  --accent: #4d9bff; --accent-text: #1d5fb4; --accent-ink: #04172e;
+  --confetti: #4d9bff, #9cc8ff, #10b981, #f5cd47, #ef4444;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="ocean"] {
+    --bg: #09111f; --surface: #111b2e; --surface-2: #1a2640; --border: #243453;
+    --text: #e8f0fc; --muted: #8a9bb8;
+    --accent: #6db1ff; --accent-text: #6db1ff; --accent-ink: #04172e;
+  }
+}
+
+/* Bosque · verde */
+html[data-theme="forest"] {
+  --bg: #eff7f2; --surface: #ffffff; --surface-2: #e3f0e8; --border: #d2e5d9;
+  --text: #10201a; --muted: #58705f;
+  --accent: #3fbf86; --accent-text: #177a4f; --accent-ink: #03210f;
+  --confetti: #3fbf86, #92e0bb, #10b981, #f5cd47, #ef4444;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="forest"] {
+    --bg: #0a130e; --surface: #121d16; --surface-2: #1b2a21; --border: #25382c;
+    --text: #e6f4ea; --muted: #86a08f;
+    --accent: #5fd9a0; --accent-text: #5fd9a0; --accent-ink: #03210f;
+  }
+}
+
+/* Atardecer · coral */
+html[data-theme="coral"] {
+  --bg: #fdf3f0; --surface: #ffffff; --surface-2: #fae6e1; --border: #f1d6cf;
+  --text: #2a1613; --muted: #8a625b;
+  --accent: #ff7f6e; --accent-text: #b2392a; --accent-ink: #2a0803;
+  --confetti: #ff7f6e, #ffb4a8, #10b981, #f5cd47, #ef4444;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="coral"] {
+    --bg: #150c0d; --surface: #201415; --surface-2: #2d1c1e; --border: #3d2629;
+    --text: #fbeceb; --muted: #b0898a;
+    --accent: #ff8f7f; --accent-text: #ff8f7f; --accent-ink: #2a0803;
+  }
+}
+
+/* Grafito · neutro */
+html[data-theme="graphite"] {
+  --bg: #f4f4f3; --surface: #ffffff; --surface-2: #ebebea; --border: #dcdcda;
+  --text: #18181b; --muted: #6b6b72;
+  --accent: #3b3f4a; --accent-text: #3b3f4a; --accent-ink: #ffffff;
+  --confetti: #3b3f4a, #8b8f9a, #10b981, #f5cd47, #ef4444;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="graphite"] {
+    --bg: #0d0d0f; --surface: #17171a; --surface-2: #222226; --border: #2e2e33;
+    --text: #ececee; --muted: #9a9aa2;
+    --accent: #e4e4e7; --accent-text: #e4e4e7; --accent-ink: #111113;
+  }
+}

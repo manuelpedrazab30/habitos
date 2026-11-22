@@ -44,28 +44,41 @@ export function homeView(state, ctx) {
     ...globalMessages(state, today).filter((m) => m.kind !== 'level' && m.topic !== 'week').slice(0, 3).map((m) => ({ ...m, source: 'habits' })),
     ...(hasFinance ? financeMessages(fin, today).filter((m) => m.priority < 80).slice(0, 2).map((m) => ({ ...m, source: 'finance' })) : []),
     ...(hasStudy ? studyMessages(study, today, { hour: new Date().getHours() }).filter((m) => m.priority >= 45).slice(0, 2).map((m) => ({ ...m, source: 'study' })) : []),
-  ].sort((a, b) => b.priority - a.priority).slice(0, 4);
+  ].sort((a, b) => b.priority - a.priority).slice(0, 3);
 
   const dueFixed = hasFinance ? pendingFixedCosts(fin, today) : [];
   const duePay = hasFinance ? pendingPaydays(fin, today) : [];
 
+  // Foco del día: una sola cosa a la vez. Progreso = hábitos de hoy + entregas de estudio (hechas hoy y pendientes).
+  const studyDue = plan ? plan.overdue.length + plan.dueToday.length : 0;
+  const studyDone = hasStudy ? study.tasks.filter((x) => x.doneAt === today).length : 0;
+  const total = hb.due.length + studyDue + studyDone;
+  const done = hb.done.length + studyDone;
+  const left = total - done;
+  const next = hb.pending[0] ? { text: `${hb.pending[0].emoji} ${hb.pending[0].name}`, href: '#/' }
+    : studyDue ? { text: `${studyDue} entrega${studyDue === 1 ? '' : 's'} de estudio`, href: '#/estudio' }
+    : duePay.length || dueFixed.length ? { text: duePay.length ? 'Registrar tu cobro' : 'Pagar un gasto fijo', href: '#/finanzas' } : null;
+  const focusTitle = !total ? 'Un día en blanco' : left <= 0 ? 'Todo al día' : done === 0 ? `${left} cosa${left === 1 ? '' : 's'} para hoy` : `Te ${left === 1 ? 'queda' : 'quedan'} ${left}`;
+  const focusSub = !total ? 'Crea un hábito o apunta una tarea y aquí verás tu avance.' : left <= 0 ? `${done} de ${total} hecho${done === 1 ? '' : 's'}. Lo demás puede esperar.` : done === 0 ? (next ? 'Empieza por una:' : 'Cuando quieras.') : `Buen ritmo${next ? ' · sigue con:' : ''}`;
+
   return h('section', { class: 'view home' },
     h('header', { class: 'home-head' },
+      h('p', { class: 'home-date' }, ((t) => t.charAt(0).toUpperCase() + t.slice(1))(formatDate(today, { weekday: 'long', day: 'numeric', month: 'long' }))),
       h('h1', {}, greeting()),
-      h('p', { class: 'muted' }, ((t) => t.charAt(0).toUpperCase() + t.slice(1))(formatDate(today, { weekday: 'long', day: 'numeric', month: 'long' }))),
     ),
 
-    top.length ? h('div', { class: 'card home-top' },
-      h('h2', {}, 'Lo importante ahora'),
-      h('ul', { class: 'plain home-list' }, top.map((m) => h('li', {},
-        h('a', { href: SOURCES[m.source][1], class: `src-tag src-${m.source}` }, SOURCES[m.source][0]),
-        h('span', {}, m.short || m.text), // versión corta: el detalle está en cada sección
-      ))),
-    ) : null,
+    h('div', { class: `card home-focus ${total && left <= 0 ? 'is-done' : ''}` },
+      ring(total ? done / total : 0, { size: 88, stroke: 9, label: total ? `${done}/${total}` : '–' }),
+      h('div', { class: 'focus-text' },
+        h('h2', {}, focusTitle),
+        h('p', { class: 'muted' }, focusSub),
+        next ? h('a', { class: 'focus-next', href: next.href }, next.text, h('span', { 'aria-hidden': 'true' }, ' ›')) : null,
+      ),
+    ),
 
     h('div', { class: 'home-grid' },
       // Hábitos
-      h('a', { class: 'card home-tile', href: '#/' },
+      h('a', { class: 'card home-tile t-habits', href: '#/' },
         h('div', { class: 'tile-head' }, h('h2', {}, 'Hábitos'), h('span', { class: 'tile-go', 'aria-hidden': 'true' }, '›')),
         hb.total ? h('div', { class: 'tile-body' },
           ring(hb.due.length ? hb.done.length / hb.due.length : 1, { size: 58, stroke: 6, label: `${hb.done.length}/${hb.due.length}` }),
@@ -77,7 +90,7 @@ export function homeView(state, ctx) {
       ),
 
       // Finanzas
-      h('a', { class: 'card home-tile', href: '#/finanzas' },
+      h('a', { class: 'card home-tile t-finance', href: '#/finanzas' },
         h('div', { class: 'tile-head' }, h('h2', {}, 'Finanzas'), h('span', { class: 'tile-go', 'aria-hidden': 'true' }, '›')),
         hasFinance ? h('div', { class: 'tile-stack' },
           ...((hl) => hl.mode === 'period' ? [
@@ -95,7 +108,7 @@ export function homeView(state, ctx) {
       ),
 
       // Estudios
-      h('a', { class: 'card home-tile', href: '#/estudio' },
+      h('a', { class: 'card home-tile t-study', href: '#/estudio' },
         h('div', { class: 'tile-head' }, h('h2', {}, 'Estudios'), h('span', { class: 'tile-go', 'aria-hidden': 'true' }, '›')),
         hasStudy ? h('div', { class: 'tile-stack' }, ...((() => {
           const due = plan.overdue.length + plan.dueToday.length;
@@ -112,6 +125,14 @@ export function homeView(state, ctx) {
         })())) : h('p', { class: 'muted small' }, 'Apunta tus exámenes y tareas y te digo qué toca cada día.'),
       ),
     ),
+
+    top.length ? h('div', { class: 'home-top' },
+      h('h3', { class: 'home-sub' }, 'Para tener en cuenta'),
+      h('ul', { class: 'plain home-list' }, top.map((m) => h('li', {},
+        h('a', { href: SOURCES[m.source][1], class: `src-tag src-${m.source}` }, SOURCES[m.source][0]),
+        h('span', {}, m.short || m.text), // versión corta: el detalle está en cada sección
+      ))),
+    ) : null,
 
     backupOverdue(state) ? h('a', { class: 'home-backup', href: '#/ajustes' },
       daysSinceBackup() === null ? 'Aún no tienes copia de seguridad: hazla en Ajustes (1 min).' : `Tu última copia es de hace ${daysSinceBackup()} días: haz una nueva en Ajustes.`) : null,

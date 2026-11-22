@@ -3,9 +3,9 @@
 // obsoletas tras un despliegue); sin conexión, la última copia guardada.
 // Solo se registra en HTTPS fuera de localhost (ver src/app.js), así no interfiere en desarrollo.
 
-const CACHE = 'habitos-v14';
+const CACHE = 'habitos-v15';
 const SHELL = [
-  './', 'index.html', 'styles.css', 'themes/classic.css', 'themes/holo.css', 'themes/hud.css', 'themes/gold.css', 'fonts/space-grotesk-latin.woff2', 'manifest.webmanifest',
+  './', 'index.html', 'styles.css', 'themes/classic.css', 'themes/holo.css', 'themes/hud.css', 'themes/gold.css', 'themes/palettes.css', 'fonts/space-grotesk-latin.woff2', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'src/app.js', 'src/store.js', 'src/demo.js', 'src/backup.js', 'src/version.js',
   'src/domain/dates.js', 'src/domain/habits.js', 'src/domain/streaks.js',

@@ -25,10 +25,11 @@ export function settingsView(state, ctx) {
     h('div', { class: 'card' },
       h('h2', {}, 'Estilo visual'),
       h('p', { class: 'muted small' }, 'Cambia el aspecto de toda la app. Tus datos no se tocan.'),
-      h('div', { class: 'seg' }, THEMES.map((t) => h('button', {
-        class: currentTheme() === t.id ? 'on' : '',
+      h('div', { class: 'theme-grid' }, THEMES.map((t) => h('button', {
+        class: `theme-opt ${currentTheme() === t.id ? 'on' : ''}`,
+        'aria-pressed': String(currentTheme() === t.id),
         onClick: () => { applyTheme(t.id); ctx.rerender(); },
-      }, t.label))),
+      }, h('span', { class: 'theme-dot', style: { background: t.dot } }), t.label))),
     ),
     installCard(),
     archived.length ? h('div', { class: 'card' },

@@ -8,9 +8,13 @@ export const THEME_KEY = 'panel.theme';
 
 // symbols: sustituye los emojis por iconos de línea en el color del tema (ui/symbols.js)
 export const THEMES = [
-  { id: 'classic', label: 'Clásico', color: '#f5cd47', symbols: true },
-  { id: 'hud', label: 'HUD · versión A', color: '#02070c' },
-  { id: 'gold', label: 'Dorado · versión B', color: '#03060c', symbols: true },
+  { id: 'classic', label: 'Clásico', color: '#f5cd47', dot: '#f5cd47', symbols: true },
+  { id: 'ocean', label: 'Océano', color: '#4d9bff', dot: '#4d9bff', symbols: true },
+  { id: 'forest', label: 'Bosque', color: '#3fbf86', dot: '#3fbf86', symbols: true },
+  { id: 'coral', label: 'Atardecer', color: '#ff7f6e', dot: '#ff7f6e', symbols: true },
+  { id: 'graphite', label: 'Grafito', color: '#3b3f4a', dot: '#8b8f9a', symbols: true },
+  { id: 'hud', label: 'HUD · versión A', color: '#02070c', dot: '#3fd0ff' },
+  { id: 'gold', label: 'Dorado · versión B', color: '#03060c', dot: '#d4a84a', symbols: true },
 ];
 
 export const currentTheme = () => document.documentElement.dataset.theme || 'classic';
