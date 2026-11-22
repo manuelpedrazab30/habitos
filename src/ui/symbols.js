@@ -57,6 +57,13 @@ const ICONS = {
   target: C(12, 12, 9) + C(12, 12, 5) + C(12, 12, 1),
   clock: C(12, 12, 9) + P('M12 7v5l3 2'),
   calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2"/>' + P('M3.5 10h17M8 3v4M16 3v4'),
+  cap: P('M2.5 9L12 4.5 21.5 9 12 13.5zM6.5 11v5c1.5 1.6 3.5 2.5 5.5 2.5s4-.9 5.5-2.5v-5M21.5 9v5'),
+  ruler: P('M3 17.5L17.5 3 21 6.5 6.5 21zM7 13.5l1.5 1.5M10 10.5l2 2M13 7.5l1.5 1.5'),
+  flask: P('M9.5 3h5M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3M7 15h10'),
+  speech: P('M4 5h16v11H9l-4 3.5V16H4z'),
+  palette: P('M12 3a9 9 0 0 0 0 18c1.2 0 2-.8 2-1.8 0-1.3-1.2-1.7-1.2-2.9 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4C21 6.4 17 3 12 3z') + C(7.5, 11, 1) + C(10, 7, 1) + C(15, 7.5, 1),
+  columns: P('M3 8.5L12 4l9 4.5M4.5 8.5h15M6 8.5v9M10 8.5v9M14 8.5v9M18 8.5v9M3.5 20h17'),
+  bars: P('M4 20h16M7 17v-6M12 17V6M17 17v-9'),
   trophy: P('M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20.5h7M10 17h4v3.5h-4z'),
   water: P('M3 15c2 0 2-1.5 4.5-1.5S9.5 15 12 15s2-1.5 4.5-1.5S18.5 15 21 15M3 19c2 0 2-1.5 4.5-1.5S9.5 19 12 19s2-1.5 4.5-1.5S18.5 19 21 19') + P('M12 3s3.5 3.8 3.5 6.5a3.5 3.5 0 0 1-7 0C8.5 6.8 12 3 12 3z'),
   plus: P('M12 5v14M5 12h14'),
@@ -72,7 +79,7 @@ const MAP = {
   '❤': 'heart', '💖': 'heart', '📦': 'box', '❔': 'question', '❓': 'question', '✈': 'plane', '🐾': 'paw', '🎁': 'gift', '☕': 'cup',
   '⛽': 'fuel', '👶': 'smile', '🙂': 'smile', '🏦': 'bank', '💳': 'card', '💵': 'cash', '💶': 'cash', '🐷': 'savings', '📈': 'chartUp',
   '👛': 'wallet', '🌍': 'globe', '🌎': 'globe', '🔥': 'flame', '📌': 'pin', '⚙': 'gear', '✎': 'pencil', '✏': 'pencil', '⬆': 'share',
-  '🎯': 'target', '⏰': 'clock', '⏱': 'clock', '📅': 'calendar', '🏆': 'trophy', '➕': 'plus', '\u2709': 'mail', '📧': 'mail', '📨': 'mail',
+  '🎯': 'target', '⏰': 'clock', '⏱': 'clock', '📅': 'calendar', '🏆': 'trophy', '➕': 'plus', '🎓': 'cap', '📐': 'ruler', '🧪': 'flask', '🗣': 'speech', '🎨': 'palette', '🏛': 'columns', '📊': 'bars', '\u2709': 'mail', '📧': 'mail', '📨': 'mail',
 };
 
 // Clave del mapa: primer carácter, sin selector de variante ni tono de piel

@@ -121,7 +121,7 @@ function backupSheet(ctx) {
       const st = ctx.store.get();
       const kb = Math.max(1, Math.round(text.length / 1024));
       body.replaceChildren(
-        h('p', {}, h('b', {}, 'Copia cifrada lista'), ` · ${kb} KB · ${st.habits.length} hábitos, ${st.finance.transactions.length} movimientos`),
+        h('p', {}, h('b', {}, 'Copia cifrada lista'), ` · ${kb} KB · ${st.habits.length} hábitos, ${st.finance.transactions.length} movimientos, ${st.study.tasks.length + st.study.exams.length} tareas y exámenes`),
         h('p', { class: 'muted small' }, 'En la hoja que se abre, elige “Guardar en Archivos” y una carpeta de iCloud Drive.'),
         h('div', { class: 'sheet-actions' },
           h('button', { class: 'btn primary', onClick: async () => {
@@ -188,7 +188,7 @@ function confirmImport(ctx, json, label) {
     toast('El archivo no parece una copia de esta app.', { tone: 'bad' });
     return;
   }
-  const summary = `${parsed.habits.length} hábitos y ${parsed.finance?.transactions?.length ?? 0} movimientos`;
+  const summary = `${parsed.habits.length} hábitos, ${parsed.finance?.transactions?.length ?? 0} movimientos y ${(parsed.study?.tasks?.length ?? 0) + (parsed.study?.exams?.length ?? 0)} tareas y exámenes`;
   if (!confirm(`Copia ${label}: ${summary}.\n\nSustituirá los datos actuales de este dispositivo (podrás deshacerlo justo después). ¿Continuar?`)) return;
   try {
     ctx.store.importJson(json);

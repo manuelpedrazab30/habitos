@@ -4,17 +4,15 @@ import { globalMessages } from '../domain/messages.js';
 import { weekStatus } from '../domain/stats.js';
 import { financeMessages, formatMoney, headline, pendingFixedCosts, pendingPaydays, periodSummary } from '../domain/finance.js';
 import { headlineText } from './finance/overview.js';
-import { inboxMessages } from '../domain/inbox.js';
-import { currentDigest, inboxCache, isConnected } from '../inbox/state.js';
+import { dayPlan, formatMinutes, hasStudyData, minutesOn, studyMessages } from '../domain/study.js';
 import { backupOverdue, daysSinceBackup } from '../backup.js';
 import { h } from './dom.js';
 import { ring } from './charts.js';
-import { mailRow } from './inbox/overview.js';
 
-// Inicio: el "cerebro" del panel. Un vistazo a los tres módulos y lo más importante de
+// Inicio: el "cerebro" del panel. Un vistazo a los tres módulos (hábitos, finanzas, estudios) y lo más importante de
 // todos ellos, ordenado por prioridad. Solo lee: cada tarjeta lleva a su sección.
 
-const SOURCES = { habits: ['Hábitos', '#/'], finance: ['Finanzas', '#/finanzas'], inbox: ['Correo', '#/correo'] };
+const SOURCES = { habits: ['Hábitos', '#/'], finance: ['Finanzas', '#/finanzas'], study: ['Estudios', '#/estudio'] };
 
 function greeting(now = new Date()) {
   const hour = now.getHours();
@@ -37,13 +35,15 @@ export function homeView(state, ctx) {
   const hb = habitsToday(state, today);
   const hasFinance = fin.accounts.length > 0;
   const p = hasFinance ? periodSummary(fin, today) : null;
-  const digest = isConnected() ? currentDigest(fin) : null;
+  const study = state.study;
+  const hasStudy = hasStudyData(study);
+  const plan = hasStudy ? dayPlan(study, today) : null;
 
   // Lo más importante de los tres módulos, sin repetir lo que ya dicen las tarjetas
   const top = [
     ...globalMessages(state, today).filter((m) => m.kind !== 'level' && m.topic !== 'week').slice(0, 3).map((m) => ({ ...m, source: 'habits' })),
     ...(hasFinance ? financeMessages(fin, today).filter((m) => m.priority < 80).slice(0, 2).map((m) => ({ ...m, source: 'finance' })) : []),
-    ...(digest ? inboxMessages(digest, { today, currency: fin.currency }).slice(0, 2) : []),
+    ...(hasStudy ? studyMessages(study, today, { hour: new Date().getHours() }).filter((m) => m.priority >= 45).slice(0, 2).map((m) => ({ ...m, source: 'study' })) : []),
   ].sort((a, b) => b.priority - a.priority).slice(0, 4);
 
   const dueFixed = hasFinance ? pendingFixedCosts(fin, today) : [];
@@ -94,25 +94,24 @@ export function homeView(state, ctx) {
         ) : h('p', { class: 'muted small' }, 'Configura tus cuentas en 30 segundos.'),
       ),
 
-      // Correo
-      h('a', { class: 'card home-tile', href: '#/correo' },
-        h('div', { class: 'tile-head' }, h('h2', {}, 'Correo'), h('span', { class: 'tile-go', 'aria-hidden': 'true' }, '›')),
-        digest ? h('div', { class: 'tile-stack' },
-          h('b', { class: 'tile-big' }, digest.needsReply.length ? `${digest.needsReply.length} por responder` : 'Al día'),
-          h('p', { class: 'muted small' }, (() => {
-            const nb = digest.bills.filter((m) => !m.bill.recorded).length;
-            const nd = digest.deadlines.length;
-            return `${digest.unread} sin leer · ${nb} factura${nb === 1 ? ' nueva' : 's nuevas'} · ${nd} fecha${nd === 1 ? '' : 's'}`;
-          })()),
-          inboxCache()?.ai?.result?.resumen ? h('p', { class: 'small tile-ai' }, inboxCache().ai.result.resumen) : null,
-        ) : h('p', { class: 'muted small' }, isConnected() ? 'Pulsa para leer tu bandeja.' : 'Conecta Gmail para ver tu bandeja resumida.'),
+      // Estudios
+      h('a', { class: 'card home-tile', href: '#/estudio' },
+        h('div', { class: 'tile-head' }, h('h2', {}, 'Estudios'), h('span', { class: 'tile-go', 'aria-hidden': 'true' }, '›')),
+        hasStudy ? h('div', { class: 'tile-stack' }, ...((() => {
+          const due = plan.overdue.length + plan.dueToday.length;
+          const exam = plan.exams[0];
+          const mins = minutesOn(study, today);
+          return [
+            h('b', { class: 'tile-big' }, due ? `${due} para entregar hoy` : exam ? `Examen ${exam.pace.daysLeft === 0 ? 'hoy' : exam.pace.daysLeft === 1 ? 'mañana' : `en ${exam.pace.daysLeft} días`}` : 'Nada urgente'),
+            h('p', { class: 'muted small' }, [
+              plan.overdue.length ? `${plan.overdue.length} vencida${plan.overdue.length === 1 ? '' : 's'}` : null,
+              exam ? `${exam.exam.title}${exam.pace.today ? `: ${exam.pace.today} tema${exam.pace.today === 1 ? '' : 's'} hoy` : ''}` : null,
+              `${mins ? formatMinutes(mins) : '0 min'} de ${formatMinutes(study.dailyGoal)} estudiados`,
+            ].filter(Boolean).join(' · ')),
+          ];
+        })())) : h('p', { class: 'muted small' }, 'Apunta tus exámenes y tareas y te digo qué toca cada día.'),
       ),
     ),
-
-    digest?.attention?.length ? h('div', { class: 'card' },
-      h('div', { class: 'card-head' }, h('h2', {}, 'Correos que requieren atención'), h('a', { href: '#/correo', class: 'small' }, 'Ver')),
-      h('div', { class: 'mail-list' }, digest.attention.slice(0, 3).map((m) => mailRow(m, { compactRow: true }))),
-    ) : null,
 
     backupOverdue(state) ? h('a', { class: 'home-backup', href: '#/ajustes' },
       daysSinceBackup() === null ? 'Aún no tienes copia de seguridad: hazla en Ajustes (1 min).' : `Tu última copia es de hace ${daysSinceBackup()} días: haz una nueva en Ajustes.`) : null,

@@ -1,6 +1,7 @@
 import { addDays, diffDays, weekday } from './domain/dates.js';
 import { createHabit } from './domain/habits.js';
 import { normalizeFinance, DEFAULT_CATEGORIES, paydayDates } from './domain/finance.js';
+import { normalizeStudy } from './domain/study.js';
 
 // Datos de ejemplo (~100 días) para explorar las gráficas sin esperar semanas.
 // Pseudoaleatorio con semilla para que sea reproducible.
@@ -137,4 +138,58 @@ export function demoFinance(today) {
 
 function toKeyMonth(key) {
   return key.slice(0, 7);
+}
+
+/**
+ * Estudios de ejemplo: cuatro asignaturas, exámenes próximos con temas a medias, tareas
+ * (una vencida, una para hoy, otras próximas), una lectura con plazo, ~5 semanas de
+ * sesiones de estudio y dos exámenes pasados con nota.
+ */
+export function demoStudy(today) {
+  let seed = 23;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const d = (n) => addDays(today, n);
+  const subjects = [
+    { id: 'demo-calc', name: 'Cálculo', emoji: '📐', color: '#6366f1' },
+    { id: 'demo-hist', name: 'Historia', emoji: '🏛️', color: '#f59e0b' },
+    { id: 'demo-prog', name: 'Programación', emoji: '💻', color: '#10b981' },
+    { id: 'demo-eng', name: 'Inglés', emoji: '🗣️', color: '#ec4899' },
+  ];
+  const topics = (names, studied, reviewed = 0) => names.map((name, i) => ({
+    name, status: i < reviewed ? 2 : i < studied ? 1 : 0,
+    studiedAt: i < studied ? d(-10 + i) : null, reviewedAt: i < reviewed ? d(-3 + i) : null,
+  }));
+  const exams = [
+    { id: 'demo-ex1', title: 'Parcial de Cálculo', subjectId: 'demo-calc', date: d(6), time: '09:00', topics: topics(['Límites', 'Continuidad', 'Derivadas', 'Regla de la cadena', 'Optimización', 'Integrales', 'Integración por partes', 'Series'], 3, 1) },
+    { id: 'demo-ex2', title: 'Examen de Historia', subjectId: 'demo-hist', date: d(13), time: '12:00', topics: topics(['Revolución francesa', 'Napoleón', 'Revolución industrial', 'Unificaciones', 'Imperialismo', 'Primera Guerra Mundial'], 1) },
+    { id: 'demo-ex3', title: 'Final de Programación', subjectId: 'demo-prog', date: d(27), topics: topics(['Recursión', 'Listas y árboles', 'Complejidad', 'Ordenación', 'Grafos'], 0) },
+    { id: 'demo-ex4', title: 'Speaking', subjectId: 'demo-eng', date: d(-12), grade: 8.2, topics: [] },
+    { id: 'demo-ex5', title: 'Primer control de Cálculo', subjectId: 'demo-calc', date: d(-30), grade: 6.5, topics: [] },
+  ];
+  const tasks = [
+    { title: 'Ejercicios tema 3', subjectId: 'demo-calc', due: d(-1), minutes: 60 },
+    { title: 'Práctica 2: listas enlazadas', subjectId: 'demo-prog', due: today, time: '23:59', minutes: 120, priority: 'alta' },
+    { title: 'Resumen capítulo 4', subjectId: 'demo-hist', due: d(1), minutes: 45 },
+    { title: 'Essay: climate change', subjectId: 'demo-eng', due: d(4), minutes: 90, priority: 'alta' },
+    { title: 'Comentario de texto', subjectId: 'demo-hist', due: d(9) },
+    { title: 'Pedir tutoría de Cálculo', subjectId: 'demo-calc', due: null },
+    // Hechas (para "entregas a tiempo")
+    { title: 'Práctica 1', subjectId: 'demo-prog', due: d(-8), doneAt: d(-9) },
+    { title: 'Vocabulary list', subjectId: 'demo-eng', due: d(-5), doneAt: d(-4) },
+    { title: 'Ejercicios tema 2', subjectId: 'demo-calc', due: d(-6), doneAt: d(-6) },
+  ];
+  const log = {};
+  for (let i = 9; i >= 1; i--) if (rnd() > 0.3) log[d(-i)] = 8 + Math.round(rnd() * 14);
+  const readings = [{ id: 'demo-read', title: 'El siglo XIX', subjectId: 'demo-hist', pages: 240, deadline: d(10), log }];
+  const sessions = [];
+  for (let i = 35; i >= 1; i--) {
+    if (rnd() < 0.25) continue;
+    const n = rnd() < 0.5 ? 1 : 2;
+    for (let j = 0; j < n; j++) {
+      const s = subjects[Math.floor(rnd() * subjects.length)];
+      const exam = exams.find((e) => e.subjectId === s.id && e.date >= today && rnd() < 0.6);
+      sessions.push({ date: d(-i), minutes: [25, 45, 60, 90][Math.floor(rnd() * 4)], subjectId: s.id, examId: exam?.id || null });
+    }
+  }
+  return normalizeStudy({ subjects, tasks, exams, readings, sessions, dailyGoal: 90 }, d(-40));
 }

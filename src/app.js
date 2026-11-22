@@ -22,11 +22,13 @@ import { accountsView } from './ui/finance/accounts.js';
 import { openEntrySheet } from './ui/finance/entrySheet.js';
 import { demoFinance } from './demo.js';
 import { homeView } from './ui/home.js';
-import { inboxOverviewView } from './ui/inbox/overview.js';
-import { inboxListView } from './ui/inbox/list.js';
-import { inboxConnectView } from './ui/inbox/connect.js';
-import { handleOAuthRedirect } from './inbox/gmail.js';
-import { inboxBusy, refreshInbox, runAi, saveInboxConfig } from './inbox/state.js';
+import { studyTodayView } from './ui/study/today.js';
+import { agendaView } from './ui/study/agenda.js';
+import { examsView } from './ui/study/exams.js';
+import { studyProgressView } from './ui/study/progress.js';
+import { openItemSheet } from './ui/study/sheets.js';
+import { demoStudy } from './demo.js';
+import { normalizeStudy } from './domain/study.js';
 
 // Arranque, router por hash y feedback de gamificación.
 // Cada cambio en el store vuelve a renderizar la vista activa entera (las vistas son
@@ -49,8 +51,8 @@ const ctx = {
   },
   rerender: () => render(),
   loadDemo() {
-    // Solo hábitos: conserva las finanzas que ya hubiera
-    store.importJson(JSON.stringify({ ...demoState(todayKey()), finance: store.get().finance }));
+    // Solo hábitos: conserva las finanzas y los estudios que ya hubiera
+    store.importJson(JSON.stringify({ ...demoState(todayKey()), finance: store.get().finance, study: store.get().study }));
     toast('Datos de ejemplo cargados. Bórralos en Ajustes cuando quieras.', { timeout: 5000 });
   },
   loadFinanceDemo() {
@@ -63,16 +65,25 @@ const ctx = {
     store.setFinance(next);
     if (message) toast(message, { tone: 'good', action: 'Deshacer', onAction: () => store.undo() });
   },
+  /** Estudios: guarda un `study` nuevo (de domain/study.js) con aviso opcional y "Deshacer". */
+  saveStudy(next, message, { tone = 'good' } = {}) {
+    store.setStudy(next);
+    if (message) toast(message, { tone, action: 'Deshacer', onAction: () => store.undo() });
+  },
+  loadStudyDemo() {
+    store.setStudy(demoStudy(todayKey()));
+    toast('Estudios de ejemplo cargados. Bórralos al final de Progreso cuando quieras.', { timeout: 5000 });
+  },
+  clearStudy() {
+    if (!confirm('¿Borrar todas las asignaturas, tareas, exámenes, lecturas y sesiones de estudio?')) return;
+    store.setStudy(normalizeStudy(null, todayKey()));
+    toast('Datos de estudios borrados', { action: 'Deshacer', onAction: () => store.undo(), timeout: 6000 });
+  },
+  /** Alta de tarea/examen/lectura. opts: { type, item, date }. */
+  openStudy(opts = {}) {
+    openItemSheet(ctx, opts);
+  },
   /** Hoja de registro rápido. opts: { type, tx } (tx = editar un movimiento). */
-  /** Correo: leer la bandeja (Gmail o ejemplo) y, si hay clave, pedir el resumen con IA. */
-  refreshInbox() {
-    const st = store.get();
-    return refreshInbox({ finance: st.finance, currency: st.finance.currency, onChange: () => render() });
-  },
-  runInboxAi() {
-    const st = store.get();
-    return runAi({ finance: st.finance, currency: st.finance.currency, onChange: () => render() });
-  },
   openEntry(opts = {}) {
     openEntrySheet(ctx, opts);
   },
@@ -146,9 +157,11 @@ function celebrate(habitId) {
 const routes = [
   [/^#\/?$/, (st) => todayView(st, ctx)],
   [/^#\/inicio$/, (st) => homeView(st, ctx)],
-  [/^#\/correo$/, (st) => inboxOverviewView(st, ctx)],
-  [/^#\/correo\/bandeja$/, (st) => inboxListView(st, ctx)],
-  [/^#\/correo\/conexion$/, (st) => inboxConnectView(st, ctx)],
+  [/^#\/estudio$/, (st) => studyTodayView(st, ctx)],
+  [/^#\/estudio\/agenda$/, (st) => agendaView(st, ctx)],
+  [/^#\/estudio\/examenes$/, (st) => examsView(st, ctx)],
+  [/^#\/estudio\/progreso$/, (st) => studyProgressView(st, ctx)],
+  [/^#\/estudio\/nuevo$/, (st) => { setTimeout(() => ctx.openStudy(), 0); return studyTodayView(st, ctx); }],
   [/^#\/finanzas$/, (st) => financeOverviewView(st, ctx)],
   [/^#\/finanzas\/nuevo$/, (st) => { setTimeout(() => ctx.openEntry(), 0); return financeOverviewView(st, ctx); }],
   [/^#\/finanzas\/movimientos$/, (st) => transactionsView(st, ctx)],
@@ -173,30 +186,30 @@ function render() {
   renderNav(path);
 }
 
-// ── Panel: cuatro secciones (Inicio, Hábitos, Finanzas, Correo), cada una con su barra inferior.
-// Elementos especiales: 'gasto' abre el registro rápido; 'refresh' actualiza el correo.
+// ── Panel: cuatro secciones (Inicio, Hábitos, Finanzas, Estudios), cada una con su barra inferior.
+// Elementos especiales: 'gasto' abre el registro rápido de finanzas; 'estudio' el alta de tarea/examen.
 const NAVS = {
-  inicio: [['#/inicio', '◉', 'Inicio'], ['#/', '◎', 'Hábitos'], ['gasto', '＋', 'Gasto', 'add'], ['#/correo', '✉', 'Correo']],
+  inicio: [['#/inicio', '◉', 'Inicio'], ['#/', '◎', 'Hábitos'], ['gasto', '＋', 'Gasto', 'add'], ['#/estudio', '▦', 'Estudios']],
   habitos: [['#/', '◎', 'Hoy'], ['#/progreso', '▤', 'Progreso'], ['#/nuevo', '＋', 'Nuevo', 'add'], ['#/ajustes', '⚙', 'Ajustes']],
   finanzas: [['#/finanzas', '◔', 'Resumen'], ['#/finanzas/movimientos', '≡', 'Movimientos'], ['gasto', '＋', 'Gasto', 'add'], ['#/finanzas/cuentas', '▣', 'Cuentas']],
-  correo: [['#/correo', '◔', 'Resumen'], ['#/correo/bandeja', '≡', 'Bandeja'], ['refresh', '↻', 'Actualizar', 'add'], ['#/correo/conexion', '⚙', 'Conexión']],
+  estudios: [['#/estudio', '◎', 'Hoy'], ['#/estudio/agenda', '≡', 'Agenda'], ['estudio', '＋', 'Añadir', 'add'], ['#/estudio/examenes', '◐', 'Exámenes'], ['#/estudio/progreso', '▤', 'Progreso']],
 };
-const SECTIONS = [['inicio', '#/inicio', 'Inicio'], ['habitos', '#/', 'Hábitos'], ['finanzas', '#/finanzas', 'Finanzas'], ['correo', '#/correo', 'Correo']];
-const sectionOf = (path) => (path.startsWith('#/inicio') ? 'inicio' : path.startsWith('#/finanzas') ? 'finanzas' : path.startsWith('#/correo') ? 'correo' : 'habitos');
+const SECTIONS = [['inicio', '#/inicio', 'Inicio'], ['habitos', '#/', 'Hábitos'], ['finanzas', '#/finanzas', 'Finanzas'], ['estudios', '#/estudio', 'Estudios']];
+const sectionOf = (path) => (path.startsWith('#/inicio') ? 'inicio' : path.startsWith('#/finanzas') ? 'finanzas' : path.startsWith('#/estudio') ? 'estudios' : 'habitos');
 
 function renderNav(path) {
   const section = sectionOf(path);
   localStorage.setItem(SECTION_KEY, section);
   document.body.dataset.section = section;
   sections.replaceChildren(...SECTIONS.map(([id, href, label]) => h('a', { href, class: section === id ? 'on' : '' }, label)));
-  const current = path === '#' || path === '' ? '#/' : path === '#/finanzas/nuevo' ? '#/finanzas' : path;
+  const current = path === '#' || path === '' ? '#/' : path === '#/finanzas/nuevo' ? '#/finanzas' : path === '#/estudio/nuevo' ? '#/estudio' : path;
   // Punto de aviso en Ajustes cuando toca hacer copia de seguridad (src/backup.js)
   const alert = backupOverdue(store.get()) ? 'alert' : '';
-  nav.replaceChildren(...NAVS[section].map(([href, icon, label, cls]) => (href === 'gasto' || href === 'refresh'
+  nav.replaceChildren(...NAVS[section].map(([href, icon, label, cls]) => (href === 'gasto' || href === 'estudio'
     ? h('button', {
-      type: 'button', class: `nav-item ${cls || ''} ${href === 'refresh' && inboxBusy() ? 'spinning' : ''}`,
-      onClick: () => (href === 'gasto' ? ctx.openEntry() : ctx.refreshInbox()),
-    }, h('span', { 'aria-hidden': 'true' }, icon), href === 'refresh' && inboxBusy() ? (inboxBusy() === 'ai' ? 'Resumiendo' : 'Leyendo') : label)
+      type: 'button', class: `nav-item ${cls || ''}`,
+      onClick: () => (href === 'gasto' ? ctx.openEntry() : ctx.openStudy()),
+    }, h('span', { 'aria-hidden': 'true' }, icon), label)
     : h('a', { href, class: `nav-item ${cls || ''} ${href === current ? 'on' : ''} ${href === '#/ajustes' ? alert : ''}`, title: href === '#/ajustes' && alert ? 'Toca hacer copia de seguridad' : null }, h('span', { 'aria-hidden': 'true' }, icon), label))));
 }
 
@@ -273,18 +286,20 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'p') ctx.go('#/progreso');
   if (e.key === 'f') ctx.go('#/finanzas');
   if (e.key === 'i') ctx.go('#/inicio');
-  if (e.key === 'c') ctx.go('#/correo');
+  if (e.key === 'e') ctx.go('#/estudio');
+  if (e.key === 'a' && sectionOf((location.hash || '#/').split('?')[0]) === 'estudios') { e.preventDefault(); ctx.openStudy(); }
   if (e.key === 'g') { e.preventDefault(); ctx.openEntry(); }
 });
 
-// Al abrir la app sin ruta, vuelve a la última sección usada
-// Vuelta de la pantalla de Google (Gmail): antes de pintar, para que el router no vea el token
-const oauth = handleOAuthRedirect();
-if (oauth?.ok) saveInboxConfig({ mode: 'gmail' });
+// El módulo de correo se retiró: borrar lo que guardaba (id de cliente, clave de Claude, caché)
+try {
+  ['panel.inbox.config', 'panel.inbox.cache'].forEach((k) => localStorage.removeItem(k));
+  sessionStorage.removeItem('panel.gmail.token');
+} catch { /* almacenamiento bloqueado */ }
 // Al abrir la app sin ruta, vuelve a la última sección usada (la primera vez, Inicio)
 if (!location.hash) {
   const last = localStorage.getItem(SECTION_KEY);
-  const start = { finanzas: '#/finanzas', correo: '#/correo', habitos: '#/' }[last] || '#/inicio';
+  const start = { finanzas: '#/finanzas', estudios: '#/estudio', habitos: '#/' }[last] || '#/inicio';
   if (start !== '#/') location.replace(start);
 }
 initTheme();
@@ -311,5 +326,3 @@ if (matchMedia('(pointer: coarse)').matches && !localStorage.getItem('panel.swip
 }
 // Que el navegador no borre los datos por falta de espacio (en la app instalada suele concederse)
 requestPersistentStorage();
-if (oauth?.ok) ctx.refreshInbox();
-else if (oauth?.error) toast(oauth.error, { tone: 'bad', timeout: 6000 });

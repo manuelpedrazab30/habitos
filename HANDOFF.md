@@ -14,7 +14,7 @@ file adds the current state, how we work together and what's open.
 
 ---
 
-## What the app is (as of version 1.16, 13 Nov 2026)
+## What the app is (as of version 1.17, 22 Nov 2026)
 
 A personal "digital brain" PWA: vanilla ES modules, no build, no backend. It's live on GitHub Pages
 at https://manuelpedrazab30.github.io/habitos/ and installed on my iPhone's home screen.
@@ -29,8 +29,10 @@ Four sections, switched with the top selector or by **swiping** left/right:
   - fixed costs and recurring transfers
   - reserve accounts: savings I don't touch, whose transfers count as period money
   - a selectable headline (Mostrar: para gastar / one account / total). Recibido, Gastado and the ring follow that choice.
-- **Correo**: Gmail summary (OAuth token flow, read-only), rule-based digest, optional Claude summary
-  with my own API key. Bills found in mail can be added as expenses.
+- **Estudios** (replaced Correo, Nov 2026): subjects, tasks, exams with topics (not started → studied →
+  reviewed), readings with page goals, study sessions. "Hoy" shows the daily plan (what's due, how many
+  topics to study per exam leaving the day before for review, pages to read). Apple Calendar via .ics
+  export/import (no automatic sync: no server). The old Gmail module is in git history.
 
 Themes: **Clásico** (default: light yellow, rings/grid background, line icons), HUD (A, cyan),
 Dorado (B, gold). The app icon matches the dark Clásico look.
@@ -69,8 +71,9 @@ saved to iCloud Drive).
 
 ## Open / ideas
 
-- **Outlook** support for Correo (Gmail first was the plan; Outlook is still pending).
-- Nothing else in progress. The working tree was clean at version 1.16, when this file was committed.
+- Estudios, phase 2: an iOS Shortcut bridge to Apple Calendar for closer-to-automatic sync (not started).
+- Estudios critique (impeccable, 26/40): issues 4 (task sheet overloaded) and 5 (Progreso shows data, no conclusions) are still open.
+- Nothing else in progress. The working tree was clean at version 1.17, when this file was committed.
 
 ## Handy commands
 

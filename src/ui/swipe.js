@@ -1,4 +1,4 @@
-// Deslizar entre secciones (Inicio → Hábitos → Finanzas → Correo) en pantallas táctiles.
+// Deslizar entre secciones (Inicio → Hábitos → Finanzas → Estudios) en pantallas táctiles.
 // La vista sigue al dedo mientras arrastras; al soltar, si el gesto fue claramente
 // horizontal y suficientemente largo (o rápido), pasa a la sección vecina con una
 // animación de entrada; si no, vuelve a su sitio.

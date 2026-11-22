@@ -1,24 +1,26 @@
 import { createHabit } from './domain/habits.js';
 import { normalizeWorkoutEntry } from './domain/workouts.js';
 import { normalizeFinance } from './domain/finance.js';
+import { normalizeStudy } from './domain/study.js';
 import { todayKey } from './domain/dates.js';
 
 // Estado único de la app, persistido en localStorage. Todo lo derivado (rachas, XP,
 // niveles, estadísticas) se calcula al vuelo desde aquí y NO se guarda.
 //
 // state = {
-//   version: 5,
+//   version: 6,
 //   habits: Habit[],                                  // ver domain/habits.js
 //   entries: { [habitId]: { 'YYYY-MM-DD': number } }, // un valor por hábito y día
 //   workouts: { [habitId]: { 'YYYY-MM-DD': { sessionId, items } } }, // sesiones de entreno (domain/workouts.js)
 //   finance: { currency, since, accounts, categories, paydays, transactions }, // domain/finance.js
+//   study: { subjects, tasks, exams, readings, sessions, dailyGoal },            // domain/study.js
 //   settings: {}
 // }
 
 export const STORAGE_KEY = 'habitos.state';
-export const VERSION = 5;
+export const VERSION = 6;
 
-const empty = () => ({ version: VERSION, habits: [], entries: {}, workouts: {}, finance: normalizeFinance(null, todayKey()), settings: {} });
+const empty = () => ({ version: VERSION, habits: [], entries: {}, workouts: {}, finance: normalizeFinance(null, todayKey()), study: normalizeStudy(null, todayKey()), settings: {} });
 
 /** Punto único para migrar datos antiguos cuando cambie el esquema (subir VERSION y añadir un paso). */
 export function migrate(raw) {
@@ -37,6 +39,8 @@ export function migrate(raw) {
   ]));
   // v4 → v5: sección de finanzas (cuentas, categorías, cobros fijos y movimientos)
   s.finance = normalizeFinance(raw.finance, todayKey());
+  // v5 → v6: sección de estudios (asignaturas, tareas, exámenes, lecturas, sesiones)
+  s.study = normalizeStudy(raw.study, todayKey());
   s.version = VERSION;
   return s;
 }
@@ -132,6 +136,12 @@ export function createStore(storage = globalThis.localStorage) {
     setFinance(finance) {
       const before = state;
       commit({ ...state, finance }, () => commit(before));
+    },
+
+    /** Estudios: igual que finanzas (domain/study.js devuelve el objeto nuevo). */
+    setStudy(study) {
+      const before = state;
+      commit({ ...state, study }, () => commit(before));
     },
 
     undo() {

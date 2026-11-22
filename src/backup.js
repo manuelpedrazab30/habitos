@@ -93,11 +93,11 @@ export async function decryptBackup(fileText, passphrase) {
  * Devuelve 'shared' | 'downloaded' | 'cancelled'. En iOS/macOS abre la hoja de Compartir
  * con el archivo; si no se puede, lo descarga.
  */
-export async function saveFile(text, filename) {
-  const file = new File([text], filename, { type: 'application/json' });
+export async function saveFile(text, filename, { type = 'application/json', title = 'Copia de Panel' } = {}) {
+  const file = new File([text], filename, { type });
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: 'Copia de Panel' });
+      await navigator.share({ files: [file], title });
       return 'shared';
     } catch (e) {
       if (e?.name === 'AbortError') return 'cancelled';
@@ -127,7 +127,9 @@ export function daysSinceBackup(now = new Date()) {
 
 /** Toca recordar la copia: hay datos y nunca se hizo, o hace más de BACKUP_EVERY_DAYS días. */
 export function backupOverdue(state, now = new Date()) {
-  const hasData = state.habits.length > 0 || (state.finance?.transactions?.length ?? 0) > 0;
+  const st = state.study;
+  const hasData = state.habits.length > 0 || (state.finance?.transactions?.length ?? 0) > 0
+    || Boolean(st && (st.tasks.length || st.exams.length || st.readings.length || st.sessions.length));
   if (!hasData) return false;
   const d = daysSinceBackup(now);
   return d === null || d >= BACKUP_EVERY_DAYS;
