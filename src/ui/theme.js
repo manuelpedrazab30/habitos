@@ -2,7 +2,7 @@ import { disableSymbols, enableSymbols } from './symbols.js';
 
 // Estilos visuales intercambiables. Cada tema es una hoja en themes/ con todas sus reglas
 // bajo html[data-theme="…"]; el tema "classic" es styles.css sin más.
-// index.html aplica el guardado antes de pintar (sin parpadeo) y acepta ?theme=hud.
+// index.html aplica el guardado antes de pintar (sin parpadeo) y acepta ?theme=ocean, etc.
 
 export const THEME_KEY = 'panel.theme';
 
@@ -13,8 +13,6 @@ export const THEMES = [
   { id: 'forest', label: 'Bosque', color: '#3fbf86', dot: '#3fbf86', symbols: true },
   { id: 'coral', label: 'Atardecer', color: '#ff7f6e', dot: '#ff7f6e', symbols: true },
   { id: 'graphite', label: 'Grafito', color: '#3b3f4a', dot: '#8b8f9a', symbols: true },
-  { id: 'hud', label: 'HUD · versión A', color: '#02070c', dot: '#3fd0ff' },
-  { id: 'gold', label: 'Dorado · versión B', color: '#03060c', dot: '#d4a84a', symbols: true },
 ];
 
 export const currentTheme = () => document.documentElement.dataset.theme || 'classic';

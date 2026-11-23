@@ -34,8 +34,8 @@ Four sections, switched with the top selector or by **swiping** left/right:
   topics to study per exam leaving the day before for review, pages to read). Apple Calendar via .ics
   export/import (no automatic sync: no server). The old Gmail module is in git history.
 
-Themes: **Clásico** (default: light yellow, rings/grid background, line icons), HUD (A, cyan),
-Dorado (B, gold). The app icon matches the dark Clásico look.
+Themes: **Clásico** (default: light yellow, rings/grid background, line icons) plus the
+Océano, Bosque, Atardecer and Grafito palettes (`themes/palettes.css`). The app icon matches the dark Clásico look.
 
 Data lives only in each device's localStorage. I keep encrypted backups (Ajustes → copia cifrada,
 saved to iCloud Drive).

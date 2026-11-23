@@ -20,18 +20,16 @@
 
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="themes/classic.css">
-  <link rel="stylesheet" href="themes/holo.css">
-  <link rel="stylesheet" href="themes/hud.css">
-  <link rel="stylesheet" href="themes/gold.css">
   <link rel="stylesheet" href="themes/palettes.css">
   <script>
-    // Tema visual antes de pintar (src/ui/theme.js). ?theme=classic|ocean|forest|coral|graphite|hud|gold lo cambia y lo recuerda.
+    // Tema visual antes de pintar (src/ui/theme.js). ?theme=classic|ocean|forest|coral|graphitelo cambia y lo recuerda.
     (function () {
       var q = new URLSearchParams(location.search).get('theme');
       if (q) localStorage.setItem('panel.theme', q);
       var t = localStorage.getItem('panel.theme') || 'classic';
+      if (!/^(classic|ocean|forest|coral|graphite)$/.test(t)) t = 'classic'; // temas retirados (HUD, Dorado) vuelven al Clásico
       document.documentElement.dataset.theme = t;
-      var colors = { hud: '#02070c', gold: '#03060c', ocean: '#4d9bff', forest: '#3fbf86', coral: '#ff7f6e', graphite: '#3b3f4a' };
+      var colors = { ocean: '#4d9bff', forest: '#3fbf86', coral: '#ff7f6e', graphite: '#3b3f4a' };
       if (colors[t]) document.querySelector('meta[name="theme-color"]').setAttribute('content', colors[t]);
     })();
   </script>
