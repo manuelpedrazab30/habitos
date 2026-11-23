@@ -10,6 +10,8 @@ create table if not exists public.panel_push (
   updated_at    timestamptz not null default now()
 );
 alter table public.panel_push enable row level security;
+-- Sin estos permisos: "permission denied for table panel_push" (la app usa `authenticated`, la función `service_role`)
+grant select, insert, update, delete on public.panel_push to authenticated, service_role;
 drop policy if exists "panel_push: leer lo propio" on public.panel_push;
 create policy "panel_push: leer lo propio"   on public.panel_push for select using ((select auth.uid()) = user_id);
 drop policy if exists "panel_push: crear lo propio" on public.panel_push;
@@ -26,6 +28,7 @@ create table if not exists public.push_keys (
   private_key text not null
 );
 alter table public.push_keys enable row level security;
+grant select, insert, update, delete on public.push_keys to service_role; -- solo la función; nunca `anon` ni `authenticated`
 
 -- Cron: llama a la función cada minuto. La función solo envía lo que ya toca, así que la clave anon basta.
 create extension if not exists pg_cron;

@@ -34,6 +34,7 @@ Deno.serve(async (req) => {
     if (error) throw error;
 
     let sent = 0;
+    const failures: { status?: number; message: string }[] = []; // errores de envío (también en los logs de la función)
     for (const row of rows ?? []) {
       const reminders: any[] = row.reminders ?? [];
       const due = reminders.filter((r) => Date.parse(r.at) <= now);
@@ -53,6 +54,10 @@ Deno.serve(async (req) => {
             sent++;
           } catch (e) {
             if (e?.statusCode === 404 || e?.statusCode === 410) dead.add(sub.endpoint);
+            else {
+              console.error('send-reminders: fallo de envío', e?.statusCode, e?.body ?? e?.message);
+              failures.push({ status: e?.statusCode, message: String(e?.body ?? e?.message ?? e).slice(0, 200) });
+            }
           }
         }
       }
@@ -61,7 +66,7 @@ Deno.serve(async (req) => {
           .eq('user_id', row.user_id);
       }
     }
-    return json({ sent });
+    return json(failures.length ? { sent, failures } : { sent });
   } catch (e) {
     return json({ error: String(e?.message ?? e) }, 500);
   }

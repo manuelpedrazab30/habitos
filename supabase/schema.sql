@@ -11,6 +11,10 @@ create table if not exists public.panel_sync (
 
 alter table public.panel_sync enable row level security;
 
+-- Permisos de tabla para usuarios con sesión (las políticas RLS de abajo limitan a cada uno a su fila).
+-- Sin esto: "permission denied for table panel_sync". Nunca se concede a `anon`.
+grant select, insert, update, delete on public.panel_sync to authenticated;
+
 drop policy if exists "panel_sync: leer lo propio" on public.panel_sync;
 create policy "panel_sync: leer lo propio"    on public.panel_sync for select using ((select auth.uid()) = user_id);
 drop policy if exists "panel_sync: crear lo propio" on public.panel_sync;
