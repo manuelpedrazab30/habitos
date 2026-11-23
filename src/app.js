@@ -1,5 +1,6 @@
 import { createStore } from './store.js';
 import { createSync } from './sync.js';
+import { createPush } from './push.js';
 import { todayKey } from './domain/dates.js';
 import { levelInfo, totalXp } from './domain/gamification.js';
 import { computeStreak, streakLabel } from './domain/streaks.js';
@@ -37,6 +38,7 @@ import { normalizeStudy } from './domain/study.js';
 
 const store = createStore();
 const sync = createSync(store);
+const push = createPush(store, sync);
 const main = document.getElementById('view');
 const header = document.getElementById('level');
 const nav = document.getElementById('nav');
@@ -46,6 +48,7 @@ const SECTION_KEY = 'panel.section';
 const ctx = {
   store,
   sync,
+  push,
   ui: { day: null, range: '3m', lineRange: '3m', editKey: null, month: null, txFilter: null },
   today: () => todayKey(),
   go(hash) {
@@ -341,3 +344,5 @@ sync.subscribe((st) => {
   if ((location.hash || '').startsWith('#/ajustes')) render();
 });
 sync.start();
+push.start();
+push.subscribe(() => { if ((location.hash || '').startsWith('#/ajustes')) render(); });

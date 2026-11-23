@@ -3,11 +3,11 @@
 // obsoletas tras un despliegue); sin conexión, la última copia guardada.
 // Solo se registra en HTTPS fuera de localhost (ver src/app.js), así no interfiere en desarrollo.
 
-const CACHE = 'habitos-v17';
+const CACHE = 'habitos-v18';
 const SHELL = [
   './', 'index.html', 'styles.css', 'themes/classic.css', 'themes/palettes.css', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
-  'src/app.js', 'src/store.js', 'src/demo.js', 'src/backup.js', 'src/sync.js', 'src/domain/sync.js', 'src/version.js',
+  'src/app.js', 'src/store.js', 'src/demo.js', 'src/backup.js', 'src/sync.js', 'src/domain/sync.js', 'src/push.js', 'src/domain/notify.js', 'src/version.js',
   'src/domain/dates.js', 'src/domain/habits.js', 'src/domain/streaks.js',
   'src/domain/gamification.js', 'src/domain/stats.js', 'src/domain/messages.js', 'src/domain/workouts.js',
   'src/ui/dom.js', 'src/ui/charts.js', 'src/ui/today.js', 'src/ui/habitForm.js',
@@ -43,4 +43,27 @@ self.addEventListener('fetch', (e) => {
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('./'))),
   );
+});
+
+// Avisos push (los envía la Edge Function send-reminders de Supabase, ver src/push.js).
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data?.json() ?? {}; } catch { d = { body: e.data?.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Panel', {
+    body: d.body || '',
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+    tag: d.tag || d.id || 'panel',
+    data: { url: d.url || './#/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || './#/', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+    const open = wins.find((w) => w.url.startsWith(self.registration.scope));
+    if (open) return open.focus().then((w) => { w.navigate?.(url); });
+    return self.clients.openWindow(url);
+  }));
 });

@@ -23,6 +23,7 @@ export function settingsView(state, ctx) {
   return h('section', { class: 'view settings' },
     h('h1', {}, 'Ajustes'),
     syncCard(ctx),
+    pushCard(ctx),
     backupCard(state, ctx, fileInput),
     h('div', { class: 'card' },
       h('h2', {}, 'Estilo visual'),
@@ -290,4 +291,37 @@ function syncSheet(ctx) {
     );
     return form;
   }, { label: 'Conectar con Supabase' });
+}
+
+// ── Avisos push (src/push.js)
+
+function pushCard(ctx) {
+  const st = ctx.push.status();
+  const time = h('input', { type: 'time', value: st.time, 'aria-label': 'Hora del aviso', onChange: (e) => ctx.push.setTime(e.target.value) });
+  const fail = (e) => toast(e.message, { tone: 'bad', timeout: 6000 });
+  return h('div', { class: 'card backup-card' },
+    h('h2', {}, 'Avisos'),
+    h('p', { class: 'muted small' }, 'Un aviso a la hora que elijas con los hábitos que te faltan hoy. Para saberlo, la app sube al servidor (sin cifrar) solo el texto del aviso con cifras, nunca nombres de hábitos ni el resto de tus datos.'),
+    !st.supported ? h('p', { class: 'small warn' }, 'Este navegador no admite avisos. En iPhone: Compartir → Añadir a pantalla de inicio y abre la app desde ahí (iOS 16.4 o superior).') : null,
+    st.supported && st.needsSync && !st.enabled ? h('p', { class: 'small muted' }, 'Primero conecta la sincronización: los avisos usan tu proyecto de Supabase.') : null,
+    st.permission === 'denied' ? h('p', { class: 'small warn' }, 'Las notificaciones están bloqueadas para esta app en los ajustes del sistema.') : null,
+    st.enabled ? h('p', { class: 'backup-status pos' }, `✓ Activados a las ${st.time}`) : null,
+    st.message ? h('p', { class: 'small error' }, st.message) : null,
+    st.supported ? h('label', { class: 'field' }, h('span', { class: 'small muted' }, 'Hora'), time) : null,
+    h('div', { class: 'actions' },
+      !st.enabled ? h('button', { class: 'btn primary', disabled: !st.supported || st.needsSync, onClick: async (e) => {
+        e.target.disabled = true;
+        try {
+          await ctx.push.enable(time.value);
+          toast('Avisos activados', { tone: 'good' });
+        } catch (err) { fail(err); }
+        ctx.rerender();
+      } }, 'Activar avisos') : null,
+      st.enabled ? h('button', { class: 'btn ghost', onClick: async () => {
+        await ctx.push.test();
+        toast('Prueba enviada: llegará en menos de un minuto', { timeout: 5000 });
+      } }, 'Enviar prueba') : null,
+      st.enabled ? h('button', { class: 'btn ghost', onClick: async () => { await ctx.push.disable(); ctx.rerender(); } }, 'Desactivar') : null,
+    ),
+  );
 }

@@ -11,7 +11,11 @@ create table if not exists public.panel_sync (
 
 alter table public.panel_sync enable row level security;
 
+drop policy if exists "panel_sync: leer lo propio" on public.panel_sync;
 create policy "panel_sync: leer lo propio"    on public.panel_sync for select using ((select auth.uid()) = user_id);
+drop policy if exists "panel_sync: crear lo propio" on public.panel_sync;
 create policy "panel_sync: crear lo propio"   on public.panel_sync for insert with check ((select auth.uid()) = user_id);
+drop policy if exists "panel_sync: editar lo propio" on public.panel_sync;
 create policy "panel_sync: editar lo propio"  on public.panel_sync for update using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists "panel_sync: borrar lo propio" on public.panel_sync;
 create policy "panel_sync: borrar lo propio"  on public.panel_sync for delete using ((select auth.uid()) = user_id);

@@ -263,6 +263,7 @@ export function createSync(store, {
     signIn,
     signOut,
     resolve,
+    request, // llamada autenticada a Supabase (la usa src/push.js)
     status: () => ({ ...status, email: cfg.email, lastSyncAt: cfg.lastSyncAt, dirty: cfg.dirty, url: cfg.url, key: cfg.key }),
     subscribe(fn) {
       listeners.add(fn);
