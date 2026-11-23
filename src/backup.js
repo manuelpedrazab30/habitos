@@ -28,7 +28,25 @@ const fromB64 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
 export const cryptoAvailable = () => Boolean(globalThis.crypto?.subtle);
 
+// La derivación (PBKDF2, ~0,5 s en un móvil) se cachea en memoria: la sincronización cifra y
+// descifra a menudo con la misma contraseña y sal, y no debe repetir ese coste cada vez.
+const keyCache = new Map();
+
 async function deriveKey(passphrase, salt, iterations) {
+  const id = `${iterations}:${toB64(salt)}:${passphrase}`;
+  if (!keyCache.has(id)) {
+    if (keyCache.size >= 4) keyCache.delete(keyCache.keys().next().value);
+    keyCache.set(id, derive(passphrase, salt, iterations));
+  }
+  try {
+    return await keyCache.get(id);
+  } catch (e) {
+    keyCache.delete(id);
+    throw e;
+  }
+}
+
+async function derive(passphrase, salt, iterations) {
   const base = await crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
     { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
@@ -40,10 +58,10 @@ async function deriveKey(passphrase, salt, iterations) {
 }
 
 /** Cifra un texto (el JSON del estado) → texto JSON del archivo de copia. */
-export async function encryptBackup(plaintext, passphrase, { iterations = PBKDF2_ITERATIONS, now = new Date() } = {}) {
+export async function encryptBackup(plaintext, passphrase, { iterations = PBKDF2_ITERATIONS, now = new Date(), salt: givenSalt = null } = {}) {
   if (!cryptoAvailable()) throw new Error('El cifrado necesita HTTPS (o localhost).');
   if (String(passphrase).length < MIN_PASSPHRASE) throw new Error(`La contraseña debe tener al menos ${MIN_PASSPHRASE} caracteres.`);
-  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const salt = givenSalt ? fromB64(givenSalt) : crypto.getRandomValues(new Uint8Array(16)); // con `salt` (base64) se reutiliza la clave ya derivada; el IV siempre es nuevo
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(passphrase, salt, iterations);
   const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext)));

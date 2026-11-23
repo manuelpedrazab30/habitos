@@ -1,4 +1,5 @@
 import { createStore } from './store.js';
+import { createSync } from './sync.js';
 import { todayKey } from './domain/dates.js';
 import { levelInfo, totalXp } from './domain/gamification.js';
 import { computeStreak, streakLabel } from './domain/streaks.js';
@@ -35,6 +36,7 @@ import { normalizeStudy } from './domain/study.js';
 // funciones puras state → DOM); el estado efímero de UI vive en ctx.ui.
 
 const store = createStore();
+const sync = createSync(store);
 const main = document.getElementById('view');
 const header = document.getElementById('level');
 const nav = document.getElementById('nav');
@@ -43,6 +45,7 @@ const SECTION_KEY = 'panel.section';
 
 const ctx = {
   store,
+  sync,
   ui: { day: null, range: '3m', lineRange: '3m', editKey: null, month: null, txFilter: null },
   today: () => todayKey(),
   go(hash) {
@@ -326,3 +329,15 @@ if (matchMedia('(pointer: coarse)').matches && !localStorage.getItem('panel.swip
 }
 // Que el navegador no borre los datos por falta de espacio (en la app instalada suele concederse)
 requestPersistentStorage();
+
+// Sincronización con Supabase (si está conectada): al abrir, al volver a primer plano y tras cada cambio.
+// Ajustes se repinta con el estado; los formularios viven en hojas, que sobreviven al re-render.
+let lastSyncState = sync.status().state;
+sync.subscribe((st) => {
+  if (st.state === 'conflict' && lastSyncState !== 'conflict') {
+    toast('Cambios distintos en este dispositivo y en la nube', { tone: 'bad', action: 'Resolver', onAction: () => ctx.go('#/ajustes'), timeout: 10000 });
+  }
+  lastSyncState = st.state;
+  if ((location.hash || '').startsWith('#/ajustes')) render();
+});
+sync.start();

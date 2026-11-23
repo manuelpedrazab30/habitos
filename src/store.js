@@ -152,11 +152,12 @@ export function createStore(storage = globalThis.localStorage) {
 
     exportJson: () => JSON.stringify(state, null, 2),
 
-    importJson(text) {
+    /** undoable=false: sin "Deshacer" (lo usa la sincronización al bajar datos de la nube). */
+    importJson(text, { undoable = true } = {}) {
       const parsed = JSON.parse(text);
       if (!Array.isArray(parsed?.habits)) throw new Error('El archivo no parece una copia de esta app.');
       const before = state;
-      commit(migrate(parsed), () => commit(before));
+      commit(migrate(parsed), undoable ? () => commit(before) : null);
     },
 
     reset() {

@@ -3,6 +3,7 @@ import { installCard } from './install.js';
 import { applyTheme, currentTheme, THEMES } from './theme.js';
 import { openSheet } from './sheet.js';
 import { formatDate } from '../domain/dates.js';
+import { summaryText } from '../domain/sync.js';
 import { APP_DATE, APP_VERSION } from '../version.js';
 import {
   BACKUP_EVERY_DAYS, cryptoAvailable, daysSinceBackup, decryptBackup, encryptBackup, isEncryptedBackup,
@@ -21,6 +22,7 @@ export function settingsView(state, ctx) {
   } });
   return h('section', { class: 'view settings' },
     h('h1', {}, 'Ajustes'),
+    syncCard(ctx),
     backupCard(state, ctx, fileInput),
     h('div', { class: 'card' },
       h('h2', {}, 'Estilo visual'),
@@ -199,3 +201,93 @@ function confirmImport(ctx, json, label) {
   }
 }
 
+
+// ── Sincronización automática con Supabase (src/sync.js)
+
+function ago(iso) {
+  if (!iso) return '';
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60_000));
+  return min < 1 ? 'ahora mismo' : min < 60 ? `hace ${min} min` : min < 1440 ? `hace ${Math.round(min / 60)} h` : `hace ${Math.round(min / 1440)} d`;
+}
+
+function syncCard(ctx) {
+  const sync = ctx.sync;
+  const st = sync.status();
+  const on = sync.enabled();
+  const conflict = st.state === 'conflict' ? st.conflict : null;
+  return h('div', { class: `card backup-card ${conflict || st.state === 'error' ? 'overdue' : ''}` },
+    h('h2', {}, 'Sincronización'),
+    !on ? h('p', { class: 'muted small' }, 'Guarda tus datos en tu propio proyecto de Supabase y compártelos entre dispositivos, sin copias a mano. Se cifran aquí antes de subirse: el servidor solo ve texto ilegible.') : null,
+    on ? h('p', { class: `backup-status ${st.state === 'error' || conflict ? 'warn' : 'pos'}` },
+      st.state === 'syncing' ? 'Sincronizando…'
+        : conflict ? 'Hay un conflicto que resolver'
+          : st.state === 'error' ? 'No se pudo sincronizar'
+            : st.dirty ? 'Cambios pendientes de subir' : `✓ Sincronizado ${ago(st.lastSyncAt)}`) : null,
+    on ? h('p', { class: 'muted small' }, st.email) : null,
+    st.message ? h('p', { class: `small ${st.state === 'error' ? 'error' : 'muted'}` }, st.message) : null,
+    conflict ? h('div', { class: 'sheet-form' },
+      h('p', { class: 'small' }, `Este dispositivo: ${summaryText(conflict.local)}.`),
+      h('p', { class: 'small' }, `Nube (${ago(conflict.remoteAt)}): ${summaryText(conflict.remote)}.`),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn primary', onClick: async () => {
+          if (confirm('Se subirá la versión de este dispositivo y se sustituirá la de la nube. ¿Continuar?')) await sync.resolve('local');
+        } }, 'Quedarme con este dispositivo'),
+        h('button', { class: 'btn ghost', onClick: async () => {
+          if (confirm('Se descargará la versión de la nube y se sustituirán los datos de este dispositivo. ¿Continuar?')) await sync.resolve('remote');
+        } }, 'Quedarme con la nube'),
+      )) : null,
+    h('div', { class: 'actions' },
+      on ? h('button', { class: 'btn ghost', disabled: st.state === 'syncing', onClick: () => sync.syncNow() }, 'Sincronizar ahora') : null,
+      on ? h('button', { class: 'btn ghost', onClick: () => {
+        if (confirm('Dejará de sincronizar en este dispositivo. Tus datos aquí y en la nube se conservan. ¿Cerrar sesión?')) sync.signOut();
+      } }, 'Cerrar sesión') : null,
+      !on ? h('button', { class: 'btn primary', disabled: !cryptoAvailable(), onClick: () => syncSheet(ctx) }, 'Conectar con Supabase') : null,
+    ),
+    !on && !cryptoAvailable() ? h('p', { class: 'error small' }, 'El cifrado solo funciona en la web publicada (HTTPS) o en localhost.') : null,
+  );
+}
+
+function syncSheet(ctx) {
+  openSheet((close) => {
+    const st = ctx.sync.status();
+    const field = (label, attrs) => h('label', { class: 'field' }, h('span', { class: 'small muted' }, label), h('input', attrs));
+    const url = field('URL del proyecto', { type: 'url', placeholder: 'https://xxxx.supabase.co', value: st.url || '', required: true, autocomplete: 'off', autocapitalize: 'off' });
+    const key = field('Clave pública (anon)', { type: 'text', placeholder: 'eyJ… o sb_publishable_…', value: st.key || '', required: true, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+    const email = field('Correo de tu cuenta', { type: 'email', name: 'username', autocomplete: 'username', value: st.email || '', required: true });
+    const pass = field('Contraseña de la cuenta', { type: 'password', name: 'password', autocomplete: 'current-password', required: true });
+    const secret = field(`Contraseña de cifrado (mín. ${MIN_PASSPHRASE})`, { type: 'password', autocomplete: 'new-password', minlength: MIN_PASSPHRASE, required: true });
+    const err = h('small', { class: 'error' });
+    let creating = false;
+    const submit = h('button', { type: 'submit', class: 'btn primary' }, 'Entrar y sincronizar');
+    const create = h('button', { type: 'submit', class: 'btn ghost', onClick: () => { creating = true; } }, 'Crear cuenta');
+    const form = h('form', { class: 'sheet-form', onSubmit: async (e) => {
+      e.preventDefault();
+      err.textContent = '';
+      submit.disabled = create.disabled = true;
+      submit.textContent = 'Conectando…';
+      try {
+        await ctx.sync.signIn({
+          url: url.querySelector('input').value, key: key.querySelector('input').value,
+          email: email.querySelector('input').value, password: pass.querySelector('input').value,
+          passphrase: secret.querySelector('input').value, create: creating,
+        });
+        close();
+        toast(ctx.sync.status().state === 'conflict' ? 'Conectado: hay un conflicto que resolver' : 'Sincronización activada', { tone: 'good' });
+        ctx.rerender();
+      } catch (e2) {
+        err.textContent = e2.message;
+        submit.disabled = create.disabled = false;
+        submit.textContent = 'Entrar y sincronizar';
+      }
+      creating = false;
+    } },
+    h('div', { class: 'sheet-head' }, h('h2', {}, 'Conectar con Supabase'), h('button', { type: 'button', class: 'icon-btn small', 'aria-label': 'Cerrar', onClick: close }, '✕')),
+    h('p', { class: 'muted small' }, 'Crea un proyecto gratuito en supabase.com, ejecuta supabase/schema.sql en su SQL Editor y copia aquí la URL y la clave pública (anon) de Project Settings → API.'),
+    url, key, email, pass, secret,
+    h('p', { class: 'muted small' }, 'La contraseña de cifrado protege tus datos: se queda en tus dispositivos y no se puede recuperar. Usa la misma en todos.'),
+    err,
+    h('div', { class: 'sheet-actions' }, submit, create),
+    );
+    return form;
+  }, { label: 'Conectar con Supabase' });
+}
