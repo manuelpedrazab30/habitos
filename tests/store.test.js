@@ -61,6 +61,21 @@ test('store: setWorkout guarda la plantilla, marca el día y desmarcar borra la 
   s.undo();
   eq(s.get().workouts[h.id]['2026-11-11'].items[0].weight, 60);
 });
+test('store: cambiar kg/lb en la última sesión cambia la plantilla', () => {
+  const s = createStore(memoryStorage());
+  const h = s.addHabit({ name: 'Entrenar', kind: 'check', schedule: { type: 'weekly', times: 2 }, sessions: [{ exercises: [{ name: 'Sentadilla' }] }] });
+  const [a] = s.get().habits[0].sessions;
+  const item = (weight, unit) => [{ exerciseId: a.exercises[0].id, name: 'Sentadilla', sets: 3, reps: 8, weight, unit }];
+  eq(a.exercises[0].unit, 'kg');
+  s.setWorkout(h.id, '2026-11-11', item(135.5, 'lb'), a.id);
+  eq(s.get().habits[0].sessions[0].exercises[0].unit, 'lb');
+  eq(s.get().workouts[h.id]['2026-11-11'].items[0], { exerciseId: a.exercises[0].id, name: 'Sentadilla', sets: 3, reps: 8, weight: 135.5, unit: 'lb' });
+  s.undo();
+  eq(s.get().habits[0].sessions[0].exercises[0].unit, 'kg', 'deshacer la sesión deshace también la unidad');
+  s.setWorkout(h.id, '2026-11-11', item(135.5, 'lb'), a.id);
+  s.setWorkout(h.id, '2026-11-04', item(60, 'kg'), a.id);
+  eq(s.get().habits[0].sessions[0].exercises[0].unit, 'lb', 'editar un día antiguo no la cambia');
+});
 test('store: migra v3 (rutina única y sesiones como array) a v4', () => {
   const mem = memoryStorage();
   mem.setItem(STORAGE_KEY, JSON.stringify({
@@ -73,7 +88,7 @@ test('store: migra v3 (rutina única y sesiones como array) a v4', () => {
   eq(st.version, 6);
   eq(st.habits[0].sessions.length, 3);
   eq(st.habits[0].routine, undefined);
-  eq(st.workouts.g['2026-11-10'], { sessionId: null, items: [{ exerciseId: 'sq', name: 'Sentadilla', sets: 3, reps: 8, weight: 60 }] });
+  eq(st.workouts.g['2026-11-10'], { sessionId: null, items: [{ exerciseId: 'sq', name: 'Sentadilla', sets: 3, reps: 8, weight: 60, unit: 'kg' }] });
 });
 test('store: datos v2 migran con workouts vacío', () => {
   const mem = memoryStorage();

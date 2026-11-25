@@ -1,7 +1,7 @@
 import { COLORS, createHabit, durationWeeks, KINDS, TEMPLATES, validateHabit } from '../domain/habits.js';
 import { addDays, formatDate, WEEKDAYS_SHORT } from '../domain/dates.js';
 import { DURATION_SUCCESS } from '../domain/stats.js';
-import { defaultSessionName, isDefaultSessionName, sessionCount } from '../domain/workouts.js';
+import { defaultSessionName, isDefaultSessionName, normUnit, parseNumber, parseReps, repsText, sessionCount, weightText } from '../domain/workouts.js';
 import { h, toast } from './dom.js';
 
 const EMOJIS = ['✨', '🧘', '📚', '🏋️', '💧', '⚖️', '🏃', '🥗', '😴', '✍️', '🎸', '💻', '🚭', '🧠', '🚴', '💰'];
@@ -73,6 +73,28 @@ export function habitFormView(state, ctx, id, params) {
         name: `ex-${idx}-${i}-${key}`, value: rows[i][key] ?? '', ...attrs,
         onInput: (e) => { rows[i][key] = key === 'name' ? e.target.value : (e.target.value === '' ? null : Number(e.target.value)); },
       }));
+    // Reps admite rango ("8-10"); peso admite decimales con coma o punto y unidad por ejercicio
+    const repsCell = (i) => h('label', { class: 'cell cell-reps' },
+      h('span', { class: 'cell-label' }, 'Reps'),
+      h('input', {
+        name: `ex-${idx}-${i}-reps`, type: 'text', inputmode: 'text', autocomplete: 'off', value: repsText(rows[i], '-'), placeholder: '8-10', 'aria-label': 'Reps (número o rango, p. ej. 8-10)',
+        onInput: (e) => Object.assign(rows[i], parseReps(e.target.value)),
+      }));
+    const weightCell = (i) => {
+      rows[i].unit = normUnit(rows[i].unit);
+      return h('div', { class: 'cell cell-weight' },
+        h('span', { class: 'cell-label' }, 'Peso'),
+        h('div', { class: 'weight-unit' },
+          h('input', {
+            name: `ex-${idx}-${i}-weight`, type: 'text', inputmode: 'decimal', autocomplete: 'off', value: weightText(rows[i].weight), placeholder: '—', 'aria-label': 'Peso',
+            onInput: (e) => { rows[i].weight = parseNumber(e.target.value); },
+          }),
+          h('button', {
+            type: 'button', class: 'unit-toggle', 'aria-label': `Unidad: ${rows[i].unit}. Cambiar`,
+            onClick: (e) => { rows[i].unit = rows[i].unit === 'kg' ? 'lb' : 'kg'; e.currentTarget.textContent = rows[i].unit; e.currentTarget.setAttribute('aria-label', `Unidad: ${rows[i].unit}. Cambiar`); },
+          }, rows[i].unit),
+        ));
+    };
     const others = draft.sessions.filter((x, i) => i !== idx && x.exercises.some((e) => e.name.trim()));
 
     return h('fieldset', {}, h('legend', {}, `Rutina: ${draft.sessions.length} ${draft.sessions.length === 1 ? 'sesión' : 'sesiones'}`),
@@ -84,12 +106,12 @@ export function habitFormView(state, ctx, id, params) {
         onClick: () => { activeSession = i; paint(); },
       }, x.name || defaultSessionName(draft.schedule, i), h('small', {}, `${x.exercises.filter((e) => e.name.trim()).length}`)))),
       field('Nombre de la sesión', h('input', { name: `s-${idx}-name`, value: session.name, placeholder: defaultSessionName(draft.schedule, idx), onInput: (e) => { session.name = e.target.value; } }), { hint: 'Ej.: Día A · Empuje, Pierna, Torso…' }),
-      rows.length ? h('div', { class: 'routine-head muted small' }, h('span', {}, 'Ejercicio'), h('span', {}, 'Series'), h('span', {}, 'Reps'), h('span', {}, 'Peso (kg)'), h('span', {})) : null,
+      rows.length ? h('div', { class: 'routine-head muted small' }, h('span', {}, 'Ejercicio'), h('span', {}, 'Series'), h('span', {}, 'Reps'), h('span', {}, 'Peso'), h('span', {})) : null,
       rows.map((ex, i) => h('div', { class: 'routine-row' },
         cell(i, 'name', { placeholder: 'Ej.: Sentadilla', 'aria-label': 'Ejercicio' }),
         cell(i, 'sets', { type: 'number', inputmode: 'numeric', min: 1, placeholder: '3', 'aria-label': 'Series' }),
-        cell(i, 'reps', { type: 'number', inputmode: 'numeric', min: 1, placeholder: '8', 'aria-label': 'Reps' }),
-        cell(i, 'weight', { type: 'number', inputmode: 'decimal', step: 'any', min: 0, placeholder: '—', 'aria-label': 'Peso (kg)' }),
+        repsCell(i),
+        weightCell(i),
         h('button', { type: 'button', class: 'icon-btn small', 'aria-label': `Quitar ${ex.name || 'ejercicio'}`, onClick: () => { rows.splice(i, 1); paint(); } }, '✕'),
       )),
       !rows.length && others.length ? h('div', { class: 'chips' }, h('span', { class: 'muted small' }, 'Copiar de:'), others.map((o) => h('button', {
@@ -97,13 +119,13 @@ export function habitFormView(state, ctx, id, params) {
       }, o.name))) : null,
       h('div', { class: 'actions' },
         h('button', { type: 'button', class: 'btn ghost', onClick: () => {
-          rows.push({ id: newId(), name: '', sets: rows.at(-1)?.sets ?? 3, reps: rows.at(-1)?.reps ?? 8, weight: null });
+          rows.push({ id: newId(), name: '', sets: rows.at(-1)?.sets ?? 3, reps: rows.at(-1)?.reps ?? 8, repsMax: rows.at(-1)?.repsMax ?? null, weight: null, unit: rows.at(-1)?.unit || 'kg' });
           paint();
           form.querySelector(`[name="ex-${idx}-${rows.length - 1}-name"]`)?.focus();
         } }, '+ Añadir ejercicio'),
         h('button', { type: 'button', class: 'btn ghost small', onClick: () => { if (confirm('¿Quitar la rutina completa?')) { draft.sessions = []; paint(); } } }, 'Quitar rutina'),
       ),
-      h('small', { class: 'muted' }, 'Reps = objetivo por serie: al completarlo con un peso te diré que subas 2,5 kg. Un ejercicio repetido en varias sesiones comparte su progresión. Si reduces las veces por semana se quitan las últimas sesiones.'),
+      h('small', { class: 'muted' }, 'Reps = objetivo por serie, un número (8) o un rango (8-10): al llegar al tope con un peso te diré que subas 2,5 kg (5 lb). Toca kg/lb para cambiar la unidad de cada ejercicio. Un ejercicio repetido en varias sesiones comparte su progresión. Si reduces las veces por semana se quitan las últimas sesiones.'),
     );
   }
 

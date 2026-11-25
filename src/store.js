@@ -1,5 +1,5 @@
 import { createHabit } from './domain/habits.js';
-import { normalizeWorkoutEntry } from './domain/workouts.js';
+import { normalizeWorkoutEntry, withUnits } from './domain/workouts.js';
 import { normalizeFinance } from './domain/finance.js';
 import { normalizeStudy } from './domain/study.js';
 import { todayKey } from './domain/dates.js';
@@ -125,8 +125,14 @@ export function createStore(storage = globalThis.localStorage) {
       const entry = normalizeWorkoutEntry({ sessionId, items });
       if (entry.items.length || entry.sessionId) w[key] = entry; // sin ejercicios, la sesión elegida sigue contando para la rotación
       else delete w[key];
+      // Cambiar kg/lb en la sesión más reciente cambia la unidad del ejercicio en la plantilla
+      const latest = Object.keys(w).every((k) => k <= key);
+      const habits = latest
+        ? state.habits.map((h) => (h.id === habitId && h.sessions?.length ? { ...h, sessions: withUnits(h.sessions, entry.items) } : h))
+        : state.habits;
       commit({
         ...state,
+        habits,
         entries: { ...state.entries, [habitId]: { ...(state.entries[habitId] || {}), [key]: 1 } },
         workouts: { ...state.workouts, [habitId]: w },
       }, () => commit(before));

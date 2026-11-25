@@ -5,7 +5,7 @@ import { computeStreak } from '../src/domain/streaks.js';
 import { habitXp, levelInfo, goalReached } from '../src/domain/gamification.js';
 import { completionRate, durationProgress, linearTrend, targetProjection, totalProjection, weekStatus, weekdayRates } from '../src/domain/stats.js';
 import { durationMessage, habitMessages, overloadMessages, targetMessage } from '../src/domain/messages.js';
-import { allExercises, bestWeights, exerciseStats, normalizeRoutine, normalizeWorkoutEntry, prCount, prefillSession, sessionCount, sessionFor, setLabel } from '../src/domain/workouts.js';
+import { allExercises, bestWeights, convertWeight, exerciseStats, exerciseUnit, normalizeRoutine, normalizeWorkoutEntry, parseNumber, parseReps, prCount, prefillSession, repsText, sessionCount, sessionFor, setLabel } from '../src/domain/workouts.js';
 
 const T = '2026-11-11'; // miércoles
 const logOf = (keys, v = 1) => Object.fromEntries(keys.map((k) => [k, v]));
@@ -256,6 +256,42 @@ test('workouts: la hoja se precarga con la última vez o el plan', () => {
   eq(prefillSession(routine, w, '2026-11-09')[0].weight, 80, 'editar un día carga lo de ese día');
   eq(setLabel({ sets: 3, reps: 8, weight: 60 }), '3×8 @ 60 kg');
   eq(setLabel({ sets: 3, reps: 12, weight: null }), '3×12 @ peso corporal');
+});
+test('workouts: pesos con decimales (coma o punto)', () => {
+  eq([parseNumber('62,5'), parseNumber('62.5'), parseNumber(' 1.234,5 '), parseNumber(''), parseNumber('abc'), parseNumber(7.25)], [62.5, 62.5, 1234.5, null, null, 7.25]);
+  eq(normalizeRoutine([{ name: 'Curl', weight: '12,5' }])[0].weight, 12.5);
+  eq(normalizeWorkoutEntry({ items: [{ name: 'Curl', weight: '7,25' }] }).items[0].weight, 7.25);
+  eq(setLabel({ sets: 3, reps: 10, weight: 12.5 }, (n) => String(n).replace('.', ',')), '3×10 @ 12,5 kg');
+});
+test('workouts: rango de reps y doble progresión al tope', () => {
+  eq([parseReps('8-10'), parseReps('10–8'), parseReps('8 a 12'), parseReps('8'), parseReps('')],
+    [{ reps: 8, repsMax: 10 }, { reps: 8, repsMax: 10 }, { reps: 8, repsMax: 12 }, { reps: 8, repsMax: null }, { reps: null, repsMax: null }]);
+  eq(repsText({ reps: 8, repsMax: 10 }), '8–10');
+  const ex = normalizeRoutine([{ id: 'sq', name: 'Sentadilla', sets: 3, reps: 8, repsMax: 10 }])[0];
+  eq([ex.reps, ex.repsMax], [8, 10]);
+  eq(normalizeRoutine([{ name: 'x', reps: 10, repsMax: 8 }])[0].repsMax, null, 'un tope menor que el mínimo se descarta');
+  eq(setLabel({ sets: 3, reps: 8, repsMax: 10, weight: 60 }), '3×8–10 @ 60 kg');
+  const at = (reps) => ({ '2026-11-10': { items: [{ exerciseId: 'sq', name: 'Sentadilla', sets: 3, reps, weight: 60 }] } });
+  eq(exerciseStats(ex, at(9), T).suggestion, null, '9 de 8–10: aún no');
+  eq(exerciseStats(ex, at(10), T).suggestion, 62.5, 'al tope del rango: sube');
+});
+test('workouts: unidad kg/lb por ejercicio', () => {
+  eq(normalizeRoutine([{ name: 'a' }, { name: 'b', unit: 'lb' }]).map((e) => e.unit), ['kg', 'lb']);
+  eq([convertWeight(100, 'kg', 'lb'), convertWeight(225, 'lb', 'kg'), convertWeight(50, 'kg', 'kg')], [220.5, 102.1, 50]);
+  const ex = { id: 'bp', name: 'Press banca', reps: 8, unit: 'lb' };
+  eq(exerciseUnit(ex), 'lb', 'la de la plantilla');
+  const w = {
+    '2026-11-03': { items: [{ exerciseId: 'bp', name: 'Press banca', reps: 8, weight: 60 }] }, // sin unidad = kg
+    '2026-11-10': { items: [{ exerciseId: 'bp', name: 'Press banca', reps: 8, weight: 135, unit: 'lb' }] },
+  };
+  const st = exerciseStats(ex, w, T);
+  eq([st.unit, st.step, st.first.weight, st.last.weight, st.suggestion], ['lb', 5, 132.3, 135, 140]);
+  eq(prCount(w), 1, '135 lb > 60 kg');
+  eq(prefillSession([ex], w, '2026-11-12')[0].unit, 'lb', 'precarga la unidad del plan');
+  const kgPlan = prefillSession([{ ...ex, unit: 'kg' }], w, '2026-11-12')[0];
+  eq([kgPlan.unit, kgPlan.weight], ['kg', 61.2], 'la última vez, convertida a la unidad del plan');
+  eq(setLabel({ sets: 3, reps: 8, weight: 135, unit: 'lb' }), '3×8 @ 135 lb');
+  ok(overloadMessages(createHabit({ name: 'E', kind: 'check', schedule: { type: 'weekly', times: 1 }, sessions: [{ exercises: [ex] }] }), w, T).some((m) => m.text.includes('140 lb')));
 });
 test('workouts: mensajes de sobrecarga concretos', () => {
   const h = createHabit({ name: 'Entrenar', emoji: '🏋️', kind: 'check', schedule: { type: 'weekly', times: 1 }, sessions: [{ exercises: routine }] });

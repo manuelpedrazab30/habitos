@@ -158,7 +158,7 @@ function liftsCard(habit, workouts, today, ctx) {
   const sel = withData.find((st) => st.exercise.id === ctx.ui.exercise) || withData[0];
   const signed = (n) => (n > 0 ? `+${fmt(n)}` : n < 0 ? `−${fmt(-n)}` : '=');
   const status = (st) => {
-    if (st.suggestion !== null) return h('span', { class: 'tag up' }, `↑ ${fmt(st.suggestion)} kg`);
+    if (st.suggestion !== null) return h('span', { class: 'tag up' }, `↑ ${fmt(st.suggestion)} ${st.unit}`);
     if (st.stalled) return h('span', { class: 'tag stall' }, `${st.atWeight} sesiones igual`);
     if (st.isPR) return h('span', { class: 'tag up' }, 'Récord');
     return h('span', { class: 'tag' }, `${st.atWeight} ${st.atWeight === 1 ? 'sesión' : 'sesiones'}`);
@@ -177,17 +177,17 @@ function liftsCard(habit, workouts, today, ctx) {
         onKeydown: (e) => { if (e.key === 'Enter') { ctx.ui.exercise = st.exercise.id; ctx.rerender(); } },
       },
         h('td', {}, st.exercise.name),
-        h('td', {}, h('b', {}, `${fmt(st.last.weight)} kg`)),
+        h('td', {}, h('b', {}, `${fmt(st.last.weight)} ${st.unit}`)),
         h('td', { class: st.change4w > 0 ? 'delta up' : st.change4w < 0 ? 'delta down' : 'muted' }, st.change4w === null ? '—' : signed(st.change4w)),
         h('td', { class: 'hide-sm' }, `${fmt(st.best)}`),
         h('td', {}, status(st)),
       ))),
     ),
     h('h3', { class: 'lift-title' }, `${sel.exercise.name}: peso por sesión`),
-    lineChart({ points: sel.history.map((x) => ({ key: x.key, value: x.weight })), unit: 'kg', color: habit.color, from, to: today }),
+    lineChart({ points: sel.history.map((x) => ({ key: x.key, value: x.weight })), unit: sel.unit, color: habit.color, from, to: today }),
     h('p', { class: 'muted small' },
       sel.count > 1
-        ? `De ${fmt(sel.first.weight)} a ${fmt(sel.last.weight)} kg desde el ${formatDate(sel.first.key)} (${signed(sel.change)} kg${sel.changePct !== null ? `, ${sel.changePct >= 0 ? '+' : '−'}${Math.round(Math.abs(sel.changePct) * 100)}%` : ''}). Toca otro ejercicio de la tabla para cambiar.`
+        ? `De ${fmt(sel.first.weight)} a ${fmt(sel.last.weight)} ${sel.unit} desde el ${formatDate(sel.first.key)} (${signed(sel.change)} ${sel.unit}${sel.changePct !== null ? `, ${sel.changePct >= 0 ? '+' : '−'}${Math.round(Math.abs(sel.changePct) * 100)}%` : ''}). Toca otro ejercicio de la tabla para cambiar.`
         : 'Con más sesiones verás aquí la tendencia.'),
     h('h3', { class: 'lift-title' }, 'Últimas sesiones'),
     h('ul', { class: 'sessions' }, recentSessions.map((k) => h('li', {},

@@ -2,27 +2,71 @@ import { addDays, weekday, WEEKDAYS } from './dates.js';
 
 // Rutinas divididas en sesiones y sobrecarga progresiva.
 //
-// habit.sessions = [{ id, name, exercises: [{ id, name, sets, reps, weight }] }]
+// habit.sessions = [{ id, name, exercises: [{ id, name, sets, reps, repsMax, weight, unit }] }]
+//   reps–repsMax = rango objetivo por serie (repsMax null = un solo número); unit 'kg' | 'lb'.
 //   Una plantilla por día de entrenamiento de la semana: tantas como veces por semana
 //   (semanal N → "Día A, B, C…" en rotación; días concretos → una por día; diario → 7).
 //   [] = el hábito no tiene rutina.
-// state.workouts[habitId]['YYYY-MM-DD'] = { sessionId, items: [{ exerciseId, name, sets, reps, weight }] }
+// state.workouts[habitId]['YYYY-MM-DD'] = { sessionId, items: [{ exerciseId, name, sets, reps, weight, unit }] }
 //   una sesión por día; guardarla también marca el día como hecho.
 //   weight null = peso corporal / sin carga (no entra en las estadísticas de peso).
+//   Pesos con decimales; cada registro guarda su unidad (sin unidad = kg). La unidad de un
+//   ejercicio es la de su plantilla (exerciseUnit); las estadísticas convierten a ella los
+//   registros en la otra. Cambiarla en la hoja de la sesión más reciente cambia la plantilla
+//   (store.setWorkout → withUnits).
 //
 // Identidad de un ejercicio: su id o, si no coincide, su nombre normalizado. Así la misma
 // "Sentadilla" en dos sesiones comparte historial y progresión.
 //
 // La estadística clave es el PESO. Regla de "doble progresión": cuando completas las reps
-// del plan con un peso, toca subir WEIGHT_STEP la próxima vez.
+// del plan (el tope del rango si lo hay) con un peso, toca subir weightStep(unidad).
 
 export const WEIGHT_STEP = 2.5; // kg
+export const LB_STEP = 5; // lb
+export const UNITS = ['kg', 'lb'];
+const KG_LB = 2.20462;
+export const normUnit = (u) => (u === 'lb' ? 'lb' : 'kg');
+export const weightStep = (unit) => (normUnit(unit) === 'lb' ? LB_STEP : WEIGHT_STEP);
+/** Convierte sin redondear (para comparar). */
+export const toKg = (w, unit) => (normUnit(unit) === 'lb' ? w / KG_LB : w);
+/** Convierte entre kg y lb, redondeado a 0,1 (para mostrar). */
+export function convertWeight(w, from, to) {
+  if (w === null || w === undefined || normUnit(from) === normUnit(to)) return w;
+  const v = normUnit(to) === 'lb' ? w * KG_LB : w / KG_LB;
+  return Math.round(v * 10) / 10;
+}
+
+/** Número con coma o punto decimal: "62,5", "62.5", "1.234,5" → número (o null). */
+export function parseNumber(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  let t = String(v).trim().replace(/\s/g, '');
+  if (!t) return null;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Peso para un campo de texto: 62.5 → "62,5". */
+export const weightText = (w) => (w === null || w === undefined ? '' : String(w).replace('.', ','));
+
+/** "8-10", "8–10", "8 a 10" → { reps: 8, repsMax: 10 }; "8" → { reps: 8, repsMax: null }. */
+export function parseReps(v) {
+  const nums = String(v ?? '').match(/\d+/g)?.map(Number).filter((n) => n > 0) || [];
+  if (!nums.length) return { reps: null, repsMax: null };
+  const [a, b] = nums;
+  if (!b || b === a) return { reps: a, repsMax: null };
+  return { reps: Math.min(a, b), repsMax: Math.max(a, b) };
+}
+
+/** { reps: 8, repsMax: 10 } → "8–10"; sin rango → "8". */
+export const repsText = ({ reps, repsMax } = {}, sep = '–') => (reps ? (repsMax ? `${reps}${sep}${repsMax}` : String(reps)) : '');
 export const STALL_SESSIONS = 4; // sesiones seguidas sin subir peso = estancado
 export const PR_XP = 15; // XP por cada récord de peso
 
 const LETTERS = 'ABCDEFG';
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `e${Date.now()}${Math.random().toString(36).slice(2)}`);
-const num = (v) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
+const num = parseNumber;
 const posInt = (v) => (num(v) > 0 ? Math.round(num(v)) : null);
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -52,7 +96,11 @@ export function normalizeRoutine(list) {
   if (!Array.isArray(list)) return [];
   return list
     .filter((e) => e && String(e.name || '').trim())
-    .map((e) => ({ id: e.id || uid(), name: String(e.name).trim(), sets: posInt(e.sets), reps: posInt(e.reps), weight: num(e.weight) }));
+    .map((e) => {
+      const reps = posInt(e.reps);
+      const max = posInt(e.repsMax);
+      return { id: e.id || uid(), name: String(e.name).trim(), sets: posInt(e.sets), reps, repsMax: reps && max > reps ? max : null, weight: num(e.weight), unit: normUnit(e.unit) };
+    });
 }
 
 /**
@@ -107,7 +155,7 @@ export function normalizeSession(items) {
   if (!Array.isArray(items)) return [];
   return items
     .filter((i) => i && (i.exerciseId || i.name))
-    .map((i) => ({ exerciseId: i.exerciseId || null, name: String(i.name || '').trim(), sets: posInt(i.sets), reps: posInt(i.reps), weight: num(i.weight) }));
+    .map((i) => ({ exerciseId: i.exerciseId || null, name: String(i.name || '').trim(), sets: posInt(i.sets), reps: posInt(i.reps), weight: num(i.weight), unit: normUnit(i.unit) }));
 }
 
 /** Acepta el formato v3 (array) y el actual ({ sessionId, items }). */
@@ -138,23 +186,52 @@ export function sessionFor(habit, workouts = {}, key) {
   return sessions[0];
 }
 
-/** Historial de un ejercicio en todas las sesiones, de más antiguo a más reciente. */
-export function exerciseHistory(workouts = {}, exercise) {
+/** Registros de un ejercicio tal cual (cada uno en su unidad), de más antiguo a más reciente. */
+export function rawHistory(workouts = {}, exercise) {
   const out = [];
   for (const [key, entry] of Object.entries(workouts)) {
     const it = entryItems(entry).find((i) => matches(i, exercise));
-    if (it) out.push({ key, sets: it.sets, reps: it.reps, weight: it.weight });
+    if (it) out.push({ key, sets: it.sets, reps: it.reps, weight: it.weight ?? null, unit: normUnit(it.unit) });
   }
   return out.sort((a, b) => (a.key < b.key ? -1 : 1));
 }
 
-/** Mejor peso de cada ejercicio: { [nombre normalizado]: kg }. */
+/** Unidad en la que se registra y se muestra un ejercicio: la de su plantilla. */
+export const exerciseUnit = (exercise) => normUnit(exercise?.unit);
+
+/**
+ * Sesiones con la unidad de cada ejercicio registrado en `items` (por nombre, en todas las
+ * sesiones). Devuelve las mismas sesiones si no cambia nada.
+ */
+export function withUnits(sessions = [], items = []) {
+  const units = new Map(items.filter((i) => normName(i.name)).map((i) => [normName(i.name), normUnit(i.unit)]));
+  let changed = false;
+  const next = sessions.map((s) => ({
+    ...s,
+    exercises: s.exercises.map((ex) => {
+      const u = units.get(normName(ex.name));
+      if (!u || u === normUnit(ex.unit)) return ex;
+      changed = true;
+      return { ...ex, unit: u };
+    }),
+  }));
+  return changed ? next : sessions;
+}
+
+/** Historial de un ejercicio en todas las sesiones, con los pesos pasados a `unit`. */
+export function exerciseHistory(workouts = {}, exercise, unit = exerciseUnit(exercise)) {
+  return rawHistory(workouts, exercise).map((h) => ({ ...h, weight: convertWeight(h.weight, h.unit, unit), unit }));
+}
+
+/** Mejor peso de cada ejercicio, en kg: { [nombre normalizado]: kg }. */
 export function bestWeights(workouts = {}) {
   const best = {};
   for (const entry of Object.values(workouts)) {
     for (const i of entryItems(entry)) {
       const k = exKey(i);
-      if (i.weight !== null && !(best[k] >= i.weight)) best[k] = i.weight;
+      if (i.weight === null || i.weight === undefined) continue;
+      const w = toKg(i.weight, i.unit);
+      if (!(best[k] >= w)) best[k] = w;
     }
   }
   return best;
@@ -166,10 +243,11 @@ export function prCount(workouts = {}) {
   const best = {};
   for (const key of Object.keys(workouts).sort()) {
     for (const i of entryItems(workouts[key])) {
-      if (i.weight === null) continue;
+      if (i.weight === null || i.weight === undefined) continue;
       const k = exKey(i);
-      if (k in best && i.weight > best[k]) count++;
-      if (!(best[k] >= i.weight)) best[k] = i.weight;
+      const w = toKg(i.weight, i.unit);
+      if (k in best && w > best[k] + 1e-9) count++;
+      if (!(best[k] >= w)) best[k] = w;
     }
   }
   return count;
@@ -181,10 +259,14 @@ export function prCount(workouts = {}) {
  * - change4w: frente a la última sesión de hace ≥ 28 días
  * - atWeight: sesiones seguidas con el peso actual; stalled si ≥ STALL_SESSIONS
  * - suggestion: peso a probar la próxima vez si en la última sesión llegaste a las reps del plan
+ *   (al tope del rango, si es un rango)
+ * Todos los pesos en `unit` (la del último registro) y `step` el salto de esa unidad.
  */
 export function exerciseStats(exercise, workouts = {}, today) {
-  const history = exerciseHistory(workouts, exercise).filter((h) => h.weight !== null);
-  if (!history.length) return { exercise, count: 0, history };
+  const unit = exerciseUnit(exercise);
+  const step = weightStep(unit);
+  const history = exerciseHistory(workouts, exercise, unit).filter((h) => h.weight !== null);
+  if (!history.length) return { exercise, count: 0, history, unit, step };
   const first = history[0];
   const last = history[history.length - 1];
   const best = Math.max(...history.map((h) => h.weight));
@@ -194,11 +276,14 @@ export function exerciseStats(exercise, workouts = {}, today) {
 
   const cutoff = addDays(today, -28);
   const ref = [...history].reverse().find((h) => h.key <= cutoff);
-  const target = exercise.reps;
+  const target = exercise.repsMax || exercise.reps;
   const readyToIncrease = Boolean(target && last.reps && last.reps >= target);
 
   return {
     exercise,
+    unit,
+    step,
+    target,
     count: history.length,
     history,
     first,
@@ -211,7 +296,7 @@ export function exerciseStats(exercise, workouts = {}, today) {
     atWeight,
     stalled: atWeight >= STALL_SESSIONS,
     readyToIncrease,
-    suggestion: readyToIncrease ? last.weight + WEIGHT_STEP : null,
+    suggestion: readyToIncrease ? Math.round((last.weight + step) * 100) / 100 : null,
   };
 }
 
@@ -226,16 +311,18 @@ export function prefillSession(exercises, workouts = {}, key, sessionId = null) 
   const items = sameSession ? entryItems(existing) : [];
   return exercises.map((ex) => {
     const today = items.find((i) => matches(i, ex));
-    if (today) return { ...today, exerciseId: ex.id, name: ex.name, done: true };
-    const prev = exerciseHistory(workouts, ex).filter((h) => h.key < key).pop();
+    if (today) return { ...today, unit: normUnit(today.unit), exerciseId: ex.id, name: ex.name, done: true };
+    const unit = exerciseUnit(ex);
+    const prev = exerciseHistory(workouts, ex, unit).filter((h) => h.key < key).pop(); // en la unidad del plan
     const base = prev || ex;
-    return { exerciseId: ex.id, name: ex.name, sets: base.sets ?? ex.sets, reps: base.reps ?? ex.reps, weight: base.weight ?? ex.weight, done: !items.length };
+    return { exerciseId: ex.id, name: ex.name, sets: base.sets ?? ex.sets, reps: base.reps ?? ex.reps, weight: base.weight ?? ex.weight, unit, done: !items.length };
   });
 }
 
-/** "3×8 @ 60 kg" */
-export function setLabel({ sets, reps, weight }, fmt = String) {
-  const sr = sets && reps ? `${sets}×${reps}` : reps ? `${reps} reps` : sets ? `${sets} series` : '';
-  const w = weight === null || weight === undefined ? 'peso corporal' : `${fmt(weight)} kg`;
+/** "3×8 @ 60 kg", "3×8–10 @ 135 lb" */
+export function setLabel({ sets, reps, repsMax, weight, unit }, fmt = String) {
+  const r = repsText({ reps, repsMax });
+  const sr = sets && r ? `${sets}×${r}` : r ? `${r} reps` : sets ? `${sets} series` : '';
+  const w = weight === null || weight === undefined ? 'peso corporal' : `${fmt(weight)} ${normUnit(unit)}`;
   return sr ? `${sr} @ ${w}` : w;
 }

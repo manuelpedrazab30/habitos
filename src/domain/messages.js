@@ -2,7 +2,7 @@ import { addDays, diffDays, formatDate, WEEKDAYS } from './dates.js';
 import { isDone, isScheduled } from './habits.js';
 import { computeStreak, streakLabel } from './streaks.js';
 import { levelInfo, totalXp, XP } from './gamification.js';
-import { allExercises, exerciseStats, hasRoutine, setLabel, WEIGHT_STEP } from './workouts.js';
+import { allExercises, exerciseStats, hasRoutine, setLabel } from './workouts.js';
 import { DURATION_SUCCESS, durationProgress, improvementAreas, targetProjection, totalProjection, weekdayRates, weekStatus } from './stats.js';
 
 // Mensajes de motivación basados en datos: cada uno dice una distancia concreta
@@ -85,7 +85,7 @@ export function durationMessage(habit, p) {
 
 /**
  * Sobrecarga progresiva: qué ejercicios toca subir, cuáles están estancados y cuánto
- * has progresado. Todo en kg concretos.
+ * has progresado. Todo en pesos concretos, en la unidad de cada ejercicio (kg o lb).
  */
 export function overloadMessages(habit, workouts = {}, today) {
   if (!hasRoutine(habit)) return [];
@@ -95,30 +95,30 @@ export function overloadMessages(habit, workouts = {}, today) {
 
   const ready = stats.filter((st) => st.suggestion !== null);
   if (ready.length) {
-    const list = ready.map((st) => `${st.exercise.name} → ${fmt(st.suggestion)} kg`).join(', ');
+    const list = ready.map((st) => `${st.exercise.name} → ${fmt(st.suggestion)} ${st.unit}`).join(', ');
     const lead = ready.length === 1
-      ? `${ready[0].exercise.name}: completaste ${setLabel(ready[0].last, fmt)}. Prueba ${fmt(ready[0].suggestion)} kg en la próxima sesión.`
+      ? `${ready[0].exercise.name}: completaste ${setLabel(ready[0].last, fmt)}. Prueba ${fmt(ready[0].suggestion)} ${ready[0].unit} en la próxima sesión.`
       : `toca subir peso en ${ready.length} ejercicios: ${list}.`;
-    out.push({ kind: 'today', priority: 72, text: `${name}: ${lead}`, short: ready.length === 1 ? `${name}: sube ${ready[0].exercise.name} a ${fmt(ready[0].suggestion)} kg` : `${name}: sube peso en ${ready.length} ejercicios` });
+    out.push({ kind: 'today', priority: 72, text: `${name}: ${lead}`, short: ready.length === 1 ? `${name}: sube ${ready[0].exercise.name} a ${fmt(ready[0].suggestion)} ${ready[0].unit}` : `${name}: sube peso en ${ready.length} ejercicios` });
   }
 
   stats.filter((st) => st.stalled && st.suggestion === null).slice(0, 2).forEach((st) => {
     out.push({
       kind: 'risk', priority: 60,
-      text: `${name}: ${st.exercise.name} lleva ${st.atWeight} sesiones en ${fmt(st.last.weight)} kg sin subir. Prueba ${fmt(st.last.weight + WEIGHT_STEP)} kg aunque hagas menos reps, o añade una serie.`,
-      short: `${st.exercise.name}: estancado en ${fmt(st.last.weight)} kg (${st.atWeight} sesiones)`,
+      text: `${name}: ${st.exercise.name} lleva ${st.atWeight} sesiones en ${fmt(st.last.weight)} ${st.unit} sin subir. Prueba ${fmt(st.last.weight + st.step)} ${st.unit} aunque hagas menos reps, o añade una serie.`,
+      short: `${st.exercise.name}: estancado en ${fmt(st.last.weight)} ${st.unit} (${st.atWeight} sesiones)`,
     });
   });
 
   const recentPR = stats.filter((st) => st.isPR && st.last.key >= addDays(today, -3));
   if (recentPR.length) {
-    out.push({ kind: 'streak', priority: 45, text: `${name}: récord reciente en ${recentPR.map((st) => `${st.exercise.name} (${fmt(st.best)} kg)`).join(', ')}.`, short: `Récord: ${recentPR[0].exercise.name} ${fmt(recentPR[0].best)} kg` });
+    out.push({ kind: 'streak', priority: 45, text: `${name}: récord reciente en ${recentPR.map((st) => `${st.exercise.name} (${fmt(st.best)} ${st.unit})`).join(', ')}.`, short: `Récord: ${recentPR[0].exercise.name} ${fmt(recentPR[0].best)} ${recentPR[0].unit}` });
   }
 
   const gains = stats.filter((st) => st.change4w > 0).sort((a, b) => b.change4w / b.last.weight - a.change4w / a.last.weight);
   if (gains.length) {
     const g = gains[0];
-    out.push({ kind: 'insight', priority: 34, text: `${name}: ${g.exercise.name} subió ${fmt(g.change4w)} kg en las últimas 4 semanas (ahora ${fmt(g.last.weight)} kg).`, short: `${g.exercise.name}: +${fmt(g.change4w)} kg en 4 semanas` });
+    out.push({ kind: 'insight', priority: 34, text: `${name}: ${g.exercise.name} subió ${fmt(g.change4w)} ${g.unit} en las últimas 4 semanas (ahora ${fmt(g.last.weight)} ${g.unit}).`, short: `${g.exercise.name}: +${fmt(g.change4w)} ${g.unit} en 4 semanas` });
   }
   return out.map((m, i) => ({ id: `${habit.id}:overload:${i}`, habitId: habit.id, ...m }));
 }

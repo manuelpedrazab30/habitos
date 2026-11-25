@@ -5,7 +5,7 @@ import { todayKey } from './domain/dates.js';
 import { levelInfo, totalXp } from './domain/gamification.js';
 import { computeStreak, streakLabel } from './domain/streaks.js';
 import { demoState } from './demo.js';
-import { allExercises, bestWeights, normName } from './domain/workouts.js';
+import { allExercises, bestWeights, convertWeight, exerciseUnit, normName } from './domain/workouts.js';
 import { fmt } from './domain/messages.js';
 import { isDone } from './domain/habits.js';
 import { h, hideTip, toast } from './ui/dom.js';
@@ -123,7 +123,7 @@ function withFeedback(habit, key, mutate, { saved = null } = {}) {
   // Récords de peso nuevos (no cuenta la primera vez que se registra un ejercicio)
   const prs = allExercises(habit).filter((ex) => {
     const k = normName(ex.name);
-    return k in bestBefore && bestAfter[k] > bestBefore[k];
+    return k in bestBefore && bestAfter[k] > bestBefore[k] + 1e-9;
   });
 
   // Confeti solo cuando el día pasa de no cumplido a cumplido (no al subir un contador
@@ -137,7 +137,7 @@ function withFeedback(habit, key, mutate, { saved = null } = {}) {
     if (lvAfter > levelInfo(xpBefore).level) {
       toast(`Nivel ${lvAfter} alcanzado`, { tone: 'level', timeout: 4500 });
     } else if (prs.length) {
-      toast(`Récord de peso: ${prs.map((ex) => `${ex.name} ${fmt(bestAfter[normName(ex.name)])} kg`).join(', ')} (+${gained} XP)`, { tone: 'good', timeout: 5000, ...undo });
+      toast(`Récord de peso: ${prs.map((ex) => { const u = exerciseUnit(ex); return `${ex.name} ${fmt(convertWeight(bestAfter[normName(ex.name)], 'kg', u))} ${u}`; }).join(', ')} (+${gained} XP)`, { tone: 'good', timeout: 5000, ...undo });
     } else if (streakAfter.best > streakBefore.best && streakAfter.best > 1) {
       toast(`Nuevo récord en ${habit.name}: ${streakLabel(streakAfter.best, streakAfter.unit)} (+${gained} XP)`, { tone: 'good', ...undo });
     } else {
